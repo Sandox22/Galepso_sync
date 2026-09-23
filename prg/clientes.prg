@@ -189,13 +189,14 @@ ENDIF
 * ==============================================================================
 * 2. SUBIDA: VFP Local (tclientes) -> MariaDB (conex_clientes)
 * ==============================================================================
-SELECT VAL(cid_clien) AS cnx_clt_galexo, ;
+SELECT VAL(cid_clien) AS cnx_clt_galexo_val, ;
        cnombre_cl AS cnx_clt_nombre, ;
        crif_cli AS cnx_clt_rif, ;
        cid_estadc AS cnx_clt_edo_codigo, ;
-       cid_clien ;
+       cid_clien, ;
+       cnit_cli ;
 FROM tclientes ;
-WHERE EMPTY(cnit_cli) ;
+WHERE EMPTY(cnit_cli) OR ALLTRIM(cnit_cli) <> ALLTRIM(cid_clien) ;
 INTO CURSOR curSubidaLocal
 
 IF TYPE("PCESTADOENVIA") = "C"
@@ -205,8 +206,7 @@ ENDIF
 IF RECCOUNT("curSubidaLocal") > 0
     SELECT curSubidaLocal
     SCAN
-        LOCAL lnGalexo, lcNombre, lcRif, lnEdoCodigo, lcCidClien
-        lnGalexo    = curSubidaLocal.cnx_clt_galexo
+        LOCAL lcNombre, lcRif, lnEdoCodigo, lcCidClien, lcAncla
         
         * Sanitización estricta del código: limpieza rigurosa usando ALLTRIM y STRTRAN 
         * para garantizar que viaje libre de espacios o caracteres extraños
@@ -216,29 +216,53 @@ IF RECCOUNT("curSubidaLocal") > 0
         lcRif       = ALLTRIM(curSubidaLocal.cnx_clt_rif)
         lnEdoCodigo = VAL(curSubidaLocal.cnx_clt_edo_codigo)
         
-        LOCAL lcSqlInsert, lnResInsert
-        * Upsert Blindado: Actualiza si ya existe sin generar duplicados ni alterar su identidad
-        lcSqlInsert = "INSERT INTO conex_clientes (cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo) " + ;
-                      "VALUES (?lcCidClien, ?lcCidClien, ?lcNombre, ?lcRif, ?lnEdoCodigo) " + ;
-                      "ON DUPLICATE KEY UPDATE " + ;
-                      "cnx_clt_galexo = VALUES(cnx_clt_galexo), " + ;
-                      "cnx_clt_nombre = VALUES(cnx_clt_nombre), " + ;
-                      "cnx_clt_rif = VALUES(cnx_clt_rif), " + ;
-                      "cnx_clt_edo_codigo = VALUES(cnx_clt_edo_codigo)"
+        * 1. Identifica el ancla: Usa cnit_cli (referencia original) si existe, sino asume cid_clien
+        lcAncla = IIF(!EMPTY(curSubidaLocal.cnit_cli), ALLTRIM(curSubidaLocal.cnit_cli), lcCidClien)
         
-        lnResInsert = SQLEXEC(tnH, lcSqlInsert, 'curResult')
+        LOCAL lcSqlCheck, lnResCheck
+        * 2. Consulta a la nube para verificar existencia
+        lcSqlCheck = "SELECT cnx_clt_galexo FROM conex_clientes WHERE cnx_clt_galexo = ?lcAncla"
+        lnResCheck = SQLEXEC(tnH, lcSqlCheck, 'curCheck')
         
-        IF lnResInsert < 0
+        IF lnResCheck < 0
+            LOCAL ARRAY laErrCheck[1]
+            AERROR(laErrCheck)
+            IF TYPE("PCESTADOENVIA") = "C"
+                PCESTADOENVIA = PCESTADOENVIA + " | ERROR CHECK NUBE: " + TRANSFORM(laErrCheck[2])
+            ENDIF
+            LOOP
+        ENDIF
+        
+        LOCAL lcSqlExecute, lnResExecute
+        IF RECCOUNT('curCheck') > 0
+            * 3. Flujo UPDATE (Si existe): Actualiza el registro preservando la identidad del ancla
+            lcSqlExecute = "UPDATE conex_clientes SET " + ;
+                           "cnx_clt_codigo = ?lcCidClien, " + ;
+                           "cnx_clt_nombre = ?lcNombre, " + ;
+                           "cnx_clt_rif = ?lcRif, " + ;
+                           "cnx_clt_edo_codigo = ?lnEdoCodigo " + ;
+                           "WHERE cnx_clt_galexo = ?lcAncla"
+        ELSE
+            * 4. Flujo INSERT (Si no existe): Inserción nativa inyectando código en ambos
+            lcSqlExecute = "INSERT INTO conex_clientes (cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo) " + ;
+                           "VALUES (?lcCidClien, ?lcCidClien, ?lcNombre, ?lcRif, ?lnEdoCodigo)"
+        ENDIF
+        
+        lnResExecute = SQLEXEC(tnH, lcSqlExecute)
+        
+        IF lnResExecute < 0
             LOCAL ARRAY laError[1]
             AERROR(laError)
             IF TYPE("PCESTADOENVIA") = "C"
                 PCESTADOENVIA = PCESTADOENVIA + " | ERROR SQL NUBE: " + TRANSFORM(laError[2])
             ENDIF
+        ELSE
+            * Marca el registro local como ya subido, almacenando el código definitivo
+            UPDATE tclientes SET cnit_cli = lcCidClien WHERE cid_clien = curSubidaLocal.cid_clien
         ENDIF
         
-        IF lnResInsert > 0
-            * Marca el registro local como ya subido
-            UPDATE tclientes SET cnit_cli = curSubidaLocal.cid_clien WHERE cid_clien = curSubidaLocal.cid_clien
+        IF USED('curCheck')
+            USE IN curCheck
         ENDIF
     ENDSCAN
 ENDIF
