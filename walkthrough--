@@ -1,0 +1,33 @@
+# Resumen de Modificaciones: Backend de Sincronización Galepso
+
+He concluido las refactorizaciones y correcciones a la lógica de sincronización según lo solicitado. Aquí tienes el desglose de los cambios realizados:
+
+## 1. Implementación del Modo Sigiloso (Headless)
+
+Se modificó el entorno para asegurar que la ejecución iniciada desde Python no detenga el proceso ni bloquee la ejecución por diálogos nativos o contención de archivos de FoxPro.
+
+*   [NEW] **[config.fpw](file:///C:/GalepsoSync/config.fpw)**: Se creó este archivo en la raíz del proyecto para indicarle a FoxPro que no muestre la ventana nativa (parpadeo blanco) en absoluto (`SCREEN=OFF`).
+*   [MODIFY] **[sincronizar.prg](file:///C:/GalepsoSync/sincronizar.prg)**: Se añadieron sentencias defensivas rigurosas al encabezado:
+    *   `SET CPDIALOG OFF`: Previene alertas de página de códigos.
+    *   `SET REPROCESS TO AUTOMATIC`: Permite la reintención infinita de bloqueos silenciosamente, evitando los cuadros de diálogo "Acceso Denegado / Archivo Ocupado".
+
+## 2. Incorporación de Sincronización de Pedidos
+
+*   [MODIFY] **[sincronizar.prg](file:///C:/GalepsoSync/sincronizar.prg)**: El orquestador base estaba ignorando la configuración `"pedidos": true` del `config.json`.
+    *   Se extrajo y parseó explícitamente `config.modules.pedidos`.
+    *   Se agregó la ejecución condicional (`DO prg\pedidos.prg WITH lnConn`), conectando exitosamente la bajada de pedidos en la rutina automatizada llamada por el backend Python.
+
+## 3. Corrección del Mapeo de IDs (`00000`)
+
+Se erradicó el origen de la corrupción del mapeo (el famoso `00000`), el cual ocurría por un error de casteo estricto al leer desde MariaDB y una falta de normalización en la subida local.
+
+*   [MODIFY] **[prg/pedidos.prg](file:///C:/GalepsoSync/prg/pedidos.prg)** (Bajada Transaccional):
+    *   Se modificó la lógica de lectura de IDs (`CNX_CLT_GALEXO` y `CNX_VEN_GALEXO`).
+    *   **Antes:** Se validaba torpemente el ID usando `TYPE() == "C"`. Si el driver ODBC parseaba el ID numéricamente (ej. ID `10003`), la evaluación era `"N"`, por lo que se generaba un valor nulo/cero que el `PADL` convertía en `"00000"`.
+    *   **Ahora:** Se utiliza una transformación forzada sin distinción de tipos: `ALLTRIM(TRANSFORM(NVL(..., "")))`. Además, se verifica explícitamente que el ID devuelto no sea la cadena vacía o `"0"` antes de normalizarlo con los ceros a la izquierda, previniendo que cualquier error de MariaDB cause la asignación de un ID falso en la ficha.
+*   [MODIFY] **[sincronizar.prg](file:///C:/GalepsoSync/sincronizar.prg)** (Sincronización hacia Arriba):
+    *   Se adaptó la inserción hacia MariaDB para que el ID siempre viaje correctamente padding (`PADL(..., 5, '0')`), previniendo que la nube lo reciba incorrectamente desnormalizado.
+
+> [!TIP]
+> ### Siguientes Pasos
+> Te recomiendo que recompiles el proyecto (`proy_sincro.PJX` a `dist\sincronizar.exe`) desde el IDE de FoxPro para que los cambios surtan efecto en el script Python (o simplemente reinicia la ejecución si estás corriendo el `.prg` directamente).

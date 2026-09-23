@@ -1,0 +1,38 @@
+# =============================================
+# .gitignore — Sincronizador GalepsoSync
+# =============================================
+
+# --- Python ---
+__pycache__/
+.venv/
+*.pyc
+
+# --- Visual FoxPro (Temporales / Compilados) ---
+*.BAK
+*.bak
+*.FXP
+*.fxp
+*.ERR
+*.err
+FOXUSER.*
+*.TMP
+
+# --- PyInstaller build artifacts ---
+build/
+
+# --- Datos Sensibles y Logs ---
+config.json
+sync_log.txt
+error_sync.txt
+log.txt
+
+# --- IDE / Editor ---
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+Thumbs.db
+Desktop.ini
+.DS_Store

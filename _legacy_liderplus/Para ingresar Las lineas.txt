@@ -1,0 +1,17 @@
+Tabla term
+aqui se almacenan las categorias
+term_id= codigo de linea
+name= descripcion de categoria
+slug= es la url
+term_group
+
+
+Tabla term_taxonomy
+term_taxonomy_id= codigo de linea
+term_id= codigo de la linea enlaza con la table "term"
+
+
+Tabla term_relationship
+object_id=codigo del post del producto
+term_taxonomy_id=id del termino o sea de la categoria
+term_order

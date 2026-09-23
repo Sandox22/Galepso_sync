@@ -1,0 +1,165 @@
+# Resumen del Proyecto: Sincronizador Galepso (VFP 9 → MariaDB)
+
+**Fecha:** 23 de septiembre de 2026
+
+---
+
+## ¿Qué es?
+
+Un sistema de sincronización bidireccional entre un ERP legado llamado **Galepso** (desarrollado en Visual FoxPro 9, datos en archivos DBF) y una base de datos **MariaDB** en la nube (servidor `159.195.66.171:3459`, base `bdsistemas2`). La integración permite que una app móvil/web (ADN) interactúe con los datos del ERP local.
+
+## Arquitectura
+
+```
+C:\GalepsoSync\
+├── prg\                          ← Módulos de sincronización (.prg)
+│   ├── principal.prg             ← Entry point: inicializa globals, abre formulario
+│   ├── init_globals.prg          ← Inicialización headless de variables PUBLIC
+│   ├── sincronizar_todo.prg      ← Orquestador maestro de módulos
+│   ├── sync_upsert.prg           ← Motor centralizado de upsert (Patrón A)
+│   ├── api_helper.prg            ← Funciones HTTP/REST (MSXML2.XMLHTTP)
+│   └── (30+ módulos más)
+├── data\                         ← Config local (empresas.dbf, respaldos.dbf)
+├── formularios\                  ← Formularios VFP (.scx/.sct)
+├── libreria\                     ← Librerías compartidas
+└── iconos\                       ← Recursos gráficos
+```
+
+## Conexión
+
+- **Vía ODBC** (modo principal): Driver MySQL ODBC 3.51 → MariaDB
+- **Vía API REST** (modo alternativo, en desarrollo): MSXML2.XMLHTTP → endpoint HTTPS
+- Flag `llApiRest` controla qué vía se usa
+
+## Los 3 Patrones de Sincronización
+
+### Patrón A — SyncUpsert (motor centralizado)
+- **Archivo:** `sync_upsert.prg`
+- **Uso:** Catálogos/tablas maestras con PK simple
+- **Mecanismo:** `INSERT ... ON DUPLICATE KEY UPDATE` dinámico
+- **Firma:** `SyncUpsert(tnHandle, tcLocalAlias, tcRemoteTable, tcFieldMap)`
+- El `tcFieldMap` es un string tipo `"campo_local|CAMPO_REMOTO|Tipo, ..."` donde Tipo = C (string), N (numérico), B (booleano)
+- **Módulos que lo usan:**
+  - `productos.prg` → `tproductos` → `conex_productos`
+  - `precios.prg` → `tproductos_precio` → `conex_precios`
+  - `estados.prg` → `testados` → `conex_estados`
+  - `municipios.prg` → `tciudades` → `conex_municipios`
+
+### Patrón B — Upsert con PK Compuesta (manual)
+- **Uso:** Tablas transaccionales con PK de N columnas
+- **Mecanismo:** SELECT existencia → INSERT o UPDATE manual
+- **Ejemplo:** `cxc_sincro_subida.prg` → CxC con PK (CODIGO, NUMERO, TIPO)
+- **Estado:** `cxc_sincro_subida.prg` actualmente es solo un stub (solo valida handle). El legacy `cxc.prg` tiene la lógica completa pero con deuda técnica (CLOSE DATABASES ALL, hardcoded paths, etc.)
+
+### Patrón C — Bajada Transaccional
+- **Uso:** Descarga desde nube hacia VFP con integridad ACID
+- **Mecanismo:** BEGIN TRANSACTION → escritura cabecera+detalle → END TRANSACTION
+- **Módulos:**
+  - `pedidos.prg` ✅ (ya refactorizado, recibe `LPARAMETERS tnH`, patrón limpio)
+  - `devoluciones.prg` ⚠️ (legacy, CLOSE DATABASES ALL, sin LPARAMETERS)
+  - `recibos.prg` ⚠️ (legacy, mismo problema)
+  - `visitas.prg` ⚠️ (legacy, mismo problema)
+
+## Módulos con Lógica Especial
+
+### clientes.prg — Sincronización Bidireccional
+El módulo más complejo. Tiene 3 fases:
+1. **BAJADA:** MariaDB → VFP. Descarga clientes nuevos (donde `cnx_clt_check=0` y `cnx_clt_galexo` vacío), los inserta localmente con código autoincremental de `tcontroles.NCLIENTE`, y confirma en la nube con UPDATE.
+2. **RESCATE DE CÓDIGOS ADN:** Cuando ADN modifica `cnx_clt_codigo`, Galepso descarga ese código definitivo y actualiza `cnit_cli` local.
+3. **SUBIDA:** VFP → MariaDB. Sube clientes donde `cnit_cli` está vacío (nunca sincronizados) usando INSERT ON DUPLICATE KEY UPDATE parametrizado.
+
+### cajas.prg — Cierre de Caja
+- Legacy, recibe `PARAMETERS lcbdempresa, lcnegocio` (firma diferente al estándar)
+- Usa `z:\galepso\` hardcoded
+
+## Variantes de Inventario
+Existen múltiples variantes legacy del módulo de inventario para diferentes líneas de negocio:
+- `inventario.prg` — Legacy monolítico (productos+precios+estados inline)
+- `inventario_api.prg` — Versión API REST (construye JSON completo y envía por HTTP)
+- `inventario_boutique.prg`, `inventario_imports.prg`, `inventario_maxi.prg`, `inventario_sports.prg` — Variantes por marca
+- `inventario_ca2.prg` — Variante para empresa CA2
+
+## API REST Helper (`api_helper.prg`)
+Funciones utilitarias ya creadas:
+- `ApiCall(lcUrl, lcMethod, lcBody)` — HTTP genérico con `MSXML2.XMLHTTP`
+- `ApiSuccess(lcResp)` — Verifica `"success":true`
+- `JsonArrayToCursor(lcJson, lcCursor)` — Parsea array JSON a cursor VFP (campos C(254))
+- `JsonVal()`, `JsonDate()`, `JsonBool()`, `JsonStr()` — Conversores JSON→VFP
+
+## Variables Globales PUBLIC
+
+| Variable | Tipo | Propósito |
+|----------|------|-----------|
+| `PCUNIDAD` | C | Letra de unidad de datos (actualmente hardcoded `"C:"`) |
+| `pcSistema` | C | Siempre `"galepso"` |
+| `pcEmpresa` | C | Código de empresa (ej. `"emp1"`) |
+| `dirdata` | C | Ruta completa al directorio de datos |
+| `lcStringConexion` | C | String de conexión ODBC |
+| `PCESTADOENVIA` | C | Log acumulativo de subida |
+| `PCESTADORECIBE` | C | Log acumulativo de bajada |
+| `contaenviar` / `contarecibe` | N | Contadores globales |
+| `llApiRest` | L | `.T.` = API REST, `.F.` = ODBC directo |
+
+## Orquestador Actual (`sincronizar_todo.prg`)
+Ejecuta los módulos en este orden:
+1. `clientes.prg` (bidireccional)
+2. `pedidos.prg` (bajada)
+3. `estados.prg` (subida SyncUpsert)
+4. `municipios.prg` (subida SyncUpsert)
+5. `productos.prg` (subida SyncUpsert)
+6. `precios.prg` (subida SyncUpsert)
+
+**No incluidos aún en el orquestador:** CxC, devoluciones, recibos, visitas, cajas.
+
+## Estado de Deuda Técnica
+
+| Módulo | Estado | Problema |
+|--------|--------|----------|
+| `cxc.prg` | ⚠️ Legacy | CLOSE DATABASES ALL, hardcoded `X:`, no recibe handle |
+| `cxc_sincro_subida.prg` | ⚠️ Stub | Solo valida handle, sin lógica implementada |
+| `devoluciones.prg` | ⚠️ Legacy | CLOSE DATABASES ALL, no recibe handle |
+| `recibos.prg` | ⚠️ Legacy | CLOSE DATABASES ALL, no recibe handle |
+| `visitas.prg` | ⚠️ Legacy | CLOSE DATABASES ALL, no recibe handle |
+| `inventario.prg` | ⚠️ Legacy | Monolítico, inline de productos+precios+estados |
+| `cajas.prg` | ⚠️ Legacy | Firma diferente, paths hardcoded |
+| `inventario_api.prg` | ⚠️ Legacy | Construye JSON manualmente, no modular |
+
+## Módulos Ya Refactorizados (Clean) ✅
+- `sync_upsert.prg` — Motor genérico, documentado, con tipos B/C/N
+- `productos.prg` — Patrón A via SyncUpsert
+- `precios.prg` — Patrón A via SyncUpsert
+- `estados.prg` — Patrón A via SyncUpsert
+- `municipios.prg` — Patrón A via SyncUpsert
+- `clientes.prg` — Bidireccional completo (bajada + rescate ADN + subida)
+- `pedidos.prg` — Patrón C transaccional ACID, ~450 líneas
+- `principal.prg` — Entry point con override de unidad X:→C:
+- `init_globals.prg` — Inicialización headless
+- `sincronizar_todo.prg` — Orquestador modular
+- `api_helper.prg` — Helper HTTP/JSON con parser artesanal
+- `crear_dbfs_sandbox.prg` — Generador de DBFs para testing
+- `setup_api_sync.prg` — Script de configuración one-shot para campo LAPI_REST
+
+## Skills de IA Configuradas
+El workspace tiene 4 skills específicas del proyecto:
+- **galepso-sync-upsert** — Documentación del Patrón A
+- **galepso-cxc** — Documentación del Patrón B (PK compuesta)
+- **galepso-pedidos** — Documentación del Patrón C (bajada transaccional)
+- **galepso-data-dictionary** — Mapeos validados VFP↔MariaDB, tcMap probados
+
+## Reglas Clave para el IA
+1. Nunca inventar nombres de campos — siempre validar contra el data dictionary
+2. Todo `SQLEXEC` debe auditar con `AERROR`
+3. Apertura defensiva de tablas con `IF !USED() → IF FILE() → USE SHARED`
+4. Validar handle ODBC al inicio de cada módulo
+5. No hacer `CLOSE DATABASES ALL` en módulos hijos
+6. No redeclarar variables PUBLIC ya inicializadas
+7. Reportar siempre a `PCESTADOENVIA` / `PCESTADORECIBE`, nunca MESSAGEBOX en producción
+8. Desconectar ODBC solo en el orquestador, nunca en módulos hijos
+
+## Datos Técnicos de Infraestructura
+- **Servidor MariaDB:** `159.195.66.171:3459`
+- **Base de datos:** `bdsistemas2`
+- **Motor tablas nube:** MyISAM, charset utf8
+- **Ruta datos locales producción:** `C:\galepso\data\emp1\` (override, antes era `X:`)
+- **Ruta datos desarrollo/sandbox:** `X:\Galepso\Data\Emp6\`
+- **VFP 9** ejecutando sobre Windows

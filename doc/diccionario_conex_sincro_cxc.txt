@@ -1,0 +1,112 @@
+================================================================================
+DICCIONARIO DE DATOS: conex_sincro_cxc
+================================================================================
+
+INFORMACIÓN DE LA TABLA:
+  - Nombre de la Tabla: conex_sincro_cxc
+  - Motor de Almacenamiento: MyISAM
+  - Juego de Caracteres: utf8
+  - Colación: utf8_general_ci
+  - Clave Primaria (Llave Compuesta): (CODIGO, NUMERO, TIPO)
+
+--------------------------------------------------------------------------------
+CAMPOS / COLUMNAS
+--------------------------------------------------------------------------------
+
+1. CODIGO
+   - Tipo de Dato: VARCHAR(20)
+   - Permite Nulos: No
+   - Valor por Defecto: ''
+   - Rol: Llave Primaria (1/3)
+   - Descripción: Identificador del codigo cliente asociada a la CxC.
+
+2. NUMERO
+   - Tipo de Dato: VARCHAR(20)
+   - Permite Nulos: No
+   - Valor por Defecto: ''
+   - Rol: Llave Primaria (2/3)
+   - Descripción: Número del documento, factura o transacción.
+
+3. TIPO
+   - Tipo de Dato: VARCHAR(10)
+   - Permite Nulos: No
+   - Valor por Defecto: ''
+   - Rol: Llave Primaria (3/3)
+   - Descripción: Tipo de documento (FAV(FACTURA DE COMPRA),NEN(NOTA DE ENTREGA),DEBV(NOTA DE DEVITO)).
+
+4. FECHA
+   - Tipo de Dato: DATE
+   - Permite Nulos: Sí
+   - Valor por Defecto: NULL
+   - Descripción: Fecha de emisión o registro del documento.
+ 
+5. FECHAVEN
+   - Tipo de Dato: DATE
+   - Permite Nulos: Sí
+   - Valor por Defecto: NULL
+   - Descripción: Fecha de vencimiento del documento.
+
+6. SALDO
+   - Tipo de Dato: DECIMAL(20,2)
+   - Permite Nulos: No
+   - Valor por Defecto: 0.00
+   - Descripción: Monto del saldo pendiente por cobrar.
+
+7. VEN_CODIGO
+   - Tipo de Dato: VARCHAR(10)
+   - Permite Nulos: No
+   - Valor por Defecto: Ninguno
+   - Descripción: Código del vendedor asignado a la cuenta o documento.
+
+8. UPD
+   - Tipo de Dato: TIMESTAMP
+   - Permite Nulos: No
+   - Valor por Defecto: CURRENT_TIMESTAMP (ON UPDATE CURRENT_TIMESTAMP)
+   - Descripción: Fecha y hora de la última actualización automática del registro.
+
+9. TASA
+   - Tipo de Dato: DECIMAL(20,4)
+   - Permite Nulos: No
+   - Valor por Defecto: 0.0000
+   - Descripción: Tasa de cambio principal utilizada en la transacción.
+
+10. TASACOP
+    - Tipo de Dato: DECIMAL(20,4)
+    - Permite Nulos: No
+    - Valor por Defecto: 0.0000
+    - Descripción: Tasa de cambio secundaria (ej. Pesos Colombianos u otra moneda).
+
+11. COMENTARIO
+    - Tipo de Dato: VARCHAR(255)
+    - Permite Nulos: Sí
+    - Valor por Defecto: NULL
+    - Descripción: Observaciones o notas adicionales asociadas a la transacción.
+
+12. INFOCXC
+    - Tipo de Dato: TEXT
+    - Permite Nulos: No
+    - Valor por Defecto: Ninguno
+    - Descripción: Información detallada o extendida (ej. texto formateado, JSON o detalles de CxC).
+
+13. FACT_AFECT
+    - Tipo de Dato: VARCHAR(255)
+    - Permite Nulos: Sí
+    - Valor por Defecto: NULL
+    - Descripción: Referencia a facturas o documentos afectados (ej. en notas de crédito/débito).
+
+14. ID_ORIGEN
+    - Tipo de Dato: VARCHAR(100)
+    - Permite Nulos: Sí
+    - Valor por Defecto: ''
+    - Descripción: Identificador del registro en el sistema o base de datos de origen.
+
+15. ID_ENTERPRISE
+    - Tipo de Dato: VARCHAR(50)
+    - Permite Nulos: Sí
+    - Valor por Defecto: '3' (ASIGNADO A KW)
+    - Descripción: Identificador de la empresa, sucursal o entidad en el ecosistema ERP.
+
+================================================================================
+CLAVES E ÍNDICES:
+  - PRIMARY KEY (`CODIGO`, `NUMERO`, `TIPO`)
+================================================================================

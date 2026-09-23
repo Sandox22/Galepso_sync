@@ -1,0 +1,230 @@
+- Lista de los campos de la tabla conex_clientes:
+
+CNX_CLT_CODIGO: Código del cliente (asignado por adn texto hasta 10 caracteres).
+
+CNX_CLT_NOMBRE: Nombre o razón social del cliente (Texto hasta 160 caracteres).
+
+CNX_CLT_RIF: Número de Registro de Información Fiscal / Identificación tributaria (Texto hasta 15 caracteres).
+
+CNX_CLT_TELEFONO1: Teléfono principal de contacto (Texto hasta 20 caracteres).
+
+CNX_CLT_DIRECCION1: Dirección principal del cliente (Texto hasta 250 caracteres).
+
+CNX_CLT_PLT_LISTA: Lista de precios o tarifa asignada (Texto hasta 5 caracteres, por defecto 'A').
+
+CNX_CLT_EDO_CODIGO: Código del estado/provincia (Número entero, por defecto 1).
+
+CNX_CLT_MPO_CODIGO: Código del municipio (Número entero, por defecto 1).
+
+CNX_CLT_VEN_CODIGO: Código del vendedor asignado (Texto hasta 3 caracteres Asignado por ADN).
+
+CNX_CLT_CHECK: Estado de verificación o casilla de control (Número entero de 1 dígito, por defecto 0).
+
+CNX_CLT_DIASCRE: Días de crédito otorgados (Número entero, por defecto 0).
+
+CNX_CLT_DIAVISITA: Día asignado para la visita comercial (Texto hasta 20 caracteres, por defecto 'LUNES').
+
+CNX_CLT_GALEXO: Código del cliente (asignado por GALEXO texto hasta 10 caracteres). 
+
+
+
+
+
+-Lista de los campos de la tabla conex_estados:
+
+CNX_EDOCODIGO: Código identificador del estado (Clave primaria, número entero).
+
+CNX_EDODESCRI: Descripción o nombre del estado (Texto hasta 300 caracteres).
+
+CNX_EDOACTIVO: Estado de activación/estatus (Booleano/entero pequeño, donde 1 suele ser activo y 0 inactivo).
+
+
+
+
+
+-Lista de los campos de la tabla conex_municipios:
+
+CNX_MPO_CODIGO: Código identificador del municipio (Clave primaria, número entero).
+
+CNX_MPO_DESCRI: Descripción o nombre del municipio (Texto hasta 300 caracteres).
+
+CNX_MPO_EDO_CODIGO: Código del estado al que pertenece el municipio (Número entero, clave foránea hacia la tabla de estados).
+
+
+
+
+
+- Lista de los campos de la tabla conex_productos:
+
+CNX_PDT_CODIGO: Código del producto (Parte de la clave primaria, texto hasta 50 caracteres).
+
+CNX_PDT_DESCRIPCION: Descripción o nombre del producto (Texto hasta 200 caracteres).
+
+CNX_PDT_TIV_CODIGO: Código del tipo de IVA o impuesto aplicado ('EX' EXENTO, 'GN' GRAVADO, 'RD' REDUCIDO).
+
+CNX_PDT_PRE_PRECIO: Precio base del producto (NO USAR).
+
+CNX_PDT_EXIS: Existencia o stock disponible (NO USAR).
+
+CNX_PDT_CANTXUND: Cantidad de unidades por empaque/presentación (CANTIDAD DE UNIDADES QUE CON FORMAN UN BULTO, FARDO O CAJAS).
+
+CNX_UND_ID: Código de la unidad de medida ('KG', 'UND', 'FAR'...).
+
+CNX_PDT_FACTOR: Factor de conversión o de empaque (CANTIDAD DE KILOS QUE PESA UN BULTO, FARDO O CAJAS).
+
+CNX_PDT_CHECK: Estado de verificación o casilla de control (Número entero de 1 dígito, por defecto 0).
+
+
+
+
+-Lista de los campos de la tabla conex_precios:
+
+CNX_PRE_PDT_CODIGO: Código del producto (Parte de la clave primaria, texto hasta 50 caracteres).
+
+CNX_PRE_UGR_UND_ID: Código de la unidad de medida (Parte de la clave primaria, texto hasta 10 caracteres).
+
+CNX_PRE_PLT_LISTA: Identificador o letra de la lista de precios (Parte de la clave primaria, texto hasta 5 caracteres).
+
+CNX_PRE_PRECIO: Valor o precio del producto para esa combinación (Número decimal con hasta 14 dígitos y 2 decimales, obligatorio).
+
+CNX_PRE_PORUTIL: Porcentaje de utilidad o margen de ganancia aplicable (Número decimal de alta precisión con hasta 7 decimales).
+
+
+
+
+-Lista de los campos de la tabla conex_documentos:
+
+CNX_DCL_NUMERO: Número del documento (Parte de la clave primaria, texto hasta 20 caracteres).
+
+CNX_DCL_TDT_CODIGO: Código del tipo de documento pedido (Parte de la clave primaria, texto hasta 5 caracteres).
+
+CNX_DCL_SCS_CODIGO: Código de la sucursal (Parte de la clave primaria, texto hasta 6 caracteres, por defecto '000001').
+
+CNX_DCL_REC_NUMERO: Número de recibo asociado ADN (Parte de la clave primaria, texto hasta 20 caracteres).
+
+CNX_DCL_VEN_CODIGO: Código del vendedor asignado ADN (Texto hasta 10 caracteres, por defecto '001').
+
+CNX_DCL_CLT_CODIGO: Código del cliente ADN (Parte de la clave primaria, texto hasta 10 caracteres).
+
+CNX_DCL_FECHA: Fecha de emisión del documento (Tipo fecha YYYY-MM-DD).
+
+CNX_DCL_NETO: Monto neto o total general del documento (Decimal con 3 decimales).
+
+CNX_DCL_BASEG: Base imponible general para impuesto/IVA (Decimal con 3 decimales).
+
+CNX_DCL_EXENTO: Monto exento de impuesto (Decimal con 3 decimales).
+
+CNX_DCL_BASER: Base imponible reducida para impuesto (Decimal con 3 decimales).
+
+CNX_DCL_BASES: Base imponible suntuaria/especial para impuesto (Decimal con 3 decimales).
+
+CNX_DCL_SERFIS: Número de serie del impresor o máquina fiscal (VACIO POR DEFECTO ).
+
+CNX_DCL_TIPTRA: Tipo de transacción o movimiento ('D' para documento , 'P' PAGO).
+
+CNX_DCL_CXC: Indicador o id de cuenta por cobrar ('0' NO MUEVE CUENTA POR COBRAR, 1 CUENTA POR COBRAR POSITIVA, '-1' CUENTA POR COBRAR NEGATIVA ).
+
+CNX_DCL_ACTIVO: Estatus activo del registro (Parte de la clave primaria, booleano/entero pequeño, por defecto 1).
+
+CNX_DCL_STD_ESTADO: Estado actual del documento ('PEN', 'PAG').
+
+CNX_DCL_PORDESC: Porcentaje de descuento aplicado sobre el neto (Decimal con 2 decimales).
+
+CNX_DCL_FECHAHORA: Fecha y hora exacta de registro del documento (Tipo DATETIME).
+
+CNX_DCL_NUMFIS: Número de factura o documento fiscal asignado (VACIO POR DEFECTO).
+
+CNX_DCL_IVAG: Monto del IVA asignado a la base general (Decimal con 3 decimales).
+
+CNX_DCL_IVAR: Monto del IVA asignado a la base reducida (Decimal con 3 decimales).
+
+CNX_DCL_HORA: Hora de emisión del documento (Tipo TIME).
+
+CNX_DCL_PLAZO: Plazo de pago otorgado en días (Número entero de hasta 3 dígitos).
+
+CNX_DCL_CONDICION: Condición de pago ('CREDITO' , 'CONTADO').
+
+CNX_DCL_ORIGENNUM: Número del documento de origen o referencia (Texto hasta 180 caracteres).
+
+CNX_DCL_CUENTA: Cuenta contable o bancaria asociada (Texto hasta 60 caracteres, por defecto 'Indefinida').
+
+CNX_DCL_PORCENTAJE: Porcentaje adicional o de retención/mora (Decimal con 2 decimales).
+
+CNX_DCL_TIPOINV: Tipo o afectación de inventario (Parte de la clave primaria, entero pequeño, por defecto 1).
+
+CNX_DCL_FECHAVEN: Fecha de vencimiento del documento (Tipo fecha YYYY-MM-DD).
+
+CNX_DCL_IDCAJA: Identificador de la caja donde se realizó la operación (VACIO POR DEFECTO).
+
+CNX_DCL_MONTODCTO: Monto total del descuento otorgado (Decimal con 3 decimales).
+
+CNX_DCL_IVAS: Monto del IVA asignado a la base suntuaria (Decimal con 3 decimales).
+
+CNX_DCL_ORIGEN: Módulo u origen de donde proviene la transacción (Texto hasta 15 caracteres).
+
+CNX_DCL_VALORCAM: Tasa del dia BCV (o tasa de pago aplicado) de cambio aplicada con alta precisióN (Decimal con hasta 8 decimales).
+
+CNX_DCL_VALORCAM2: Tasa de cambio secundaria o alternativa (Decimal con hasta 6 decimales).
+
+CNX_DCL_NUMAUX: Número auxiliar o consecutivo interno (Texto hasta 20 caracteres).
+
+CNX_DCL_FACAFE: Número de factura afectada (usado en notas de crédito/débito, texto hasta 200 caracteres).
+
+CNX_DCL_DESCRIPCION: Descripción o concepto del documento (Texto hasta 200 caracteres).
+
+CNX_DCL_COMEN: Comentarios u observaciones adicionales (Texto hasta 250 caracteres).
+
+CNX_CHECK: Estado de verificación o casilla de sincronización/control (Número entero).
+
+CNX_PED_GALEXO: Identificador o adjunto de galería/anexo del pedido (Texto hasta 100 caracteres).
+
+
+
+- Lista de los campos de la tabla conex_movimientos:
+
+CNX_MCL_DCL_NUMERO: Número del documento asociado (Parte de la clave primaria, texto hasta 20 caracteres).
+
+CNX_MCL_DCL_TDT_CODIGO: Código del tipo de documento (Parte de la clave primaria, texto hasta 5 caracteres).
+
+CNX_MCL_AMC_CODIGO: Código del almacén o depósito (Parte de la clave primaria, texto hasta 10 caracteres, '001' por defecto).
+
+CNX_MCL_UPP_PDT_CODIGO: Código del producto procesado (Parte de la clave primaria, texto hasta 20 caracteres).
+
+CNX_MCL_UPP_UND_ID: Código de la unidad de medida (Parte de la clave primaria, texto hasta 10 caracteres).
+
+CNX_MCL_CTR_CODIGO: Código del centro de costo o renglón (Parte de la clave primaria, texto hasta 10 caracteres, '' por defecto).
+
+CNX_MCL_CANTIDAD: Cantidad total del producto en la transacción (Decimal con 3 decimales).
+
+CNX_MCL_ACTIVO: Estatus activo del renglón/movimiento (Booleano/entero pequeño, por defecto 0).
+
+CNX_MCL_BASE: Precio base unitario o monto base (Decimal con 4 decimales).
+
+CNX_MCL_DCL_TIPTRA: Tipo de transacción o movimiento (Parte de la clave primaria, carácter único).
+
+CNX_MCL_PLT_LISTA: Lista de precios aplicada al renglón (Texto hasta 5 caracteres).
+
+CNX_MCL_CANTXUND: Cantidad de unidades por empaque o presentación (Decimal con 3 decimales).
+
+CNX_MCL_PORIVA: Porcentaje de IVA/impuesto aplicado al renglón (Decimal con 2 decimales).
+
+CNX_MCL_TIVACOD: Código del tipo de IVA aplicado (Texto hasta 10 caracteres).
+
+CNX_MCL_VEN_CODIGO: Código del vendedor asignado ADN al renglón (Texto hasta 10 caracteres).
+
+CNX_MCL_DESCRI: Descripción corta del producto o concepto (Texto hasta 80 caracteres).
+
+CNX_MCL_BASEC: Precio base de costo del producto (Decimal con 3 decimales).
+
+CNX_MCL_AMPLIO: Descripción amplia o detalle extendido del item (Texto hasta 500 caracteres).
+
+CNX_MCL_FISICO: Indicador de afectación de inventario físico (Decimal de 1 dígito sin decimales, por defecto 0).
+
+CNX_MCL_PORDCTO: Porcentaje de descuento aplicado a este ítem específico (Decimal con 2 decimales).
+
+CNX_MCL_PIEZAS: Cantidad de piezas, bultos o empaques secundarios (Decimal con 2 decimales).
+
+
+
+
+

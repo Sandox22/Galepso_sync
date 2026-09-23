@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Reporte ejecutivo de arquitectura del sistema LiderPlusSync - Sincronizador ODBC/MySQL legacy en Visual FoxPro">
+    <title>LiderPlusSync — Reporte de Arquitectura</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --bg-card-hover: rgba(30, 41, 59, 0.8);
+            --border-glass: rgba(99, 102, 241, 0.15);
+            --border-glass-hover: rgba(99, 102, 241, 0.35);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #818cf8;
+            --accent-purple: #a78bfa;
+            --accent-cyan: #22d3ee;
+            --accent-emerald: #34d399;
+            --accent-amber: #fbbf24;
+            --accent-rose: #fb7185;
+            --accent-orange: #fb923c;
+            --gradient-main: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+            --gradient-cyan: linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%);
+            --gradient-emerald: linear-gradient(135deg, #059669 0%, #34d399 100%);
+            --gradient-amber: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+            --gradient-rose: linear-gradient(135deg, #e11d48 0%, #fb7185 100%);
+            --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+            --shadow-card: 0 4px 30px rgba(0, 0, 0, 0.3);
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 8px;
+            --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* ══════════ ANIMATED BACKGROUND ══════════ */
+        .bg-mesh {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .bg-mesh .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.12;
+            animation: orbFloat 20s ease-in-out infinite;
+        }
+
+        .bg-mesh .orb:nth-child(1) {
+            width: 600px; height: 600px;
+            background: #6366f1;
+            top: -10%; left: -5%;
+            animation-delay: 0s;
+        }
+        .bg-mesh .orb:nth-child(2) {
+            width: 500px; height: 500px;
+            background: #8b5cf6;
+            top: 40%; right: -10%;
+            animation-delay: -7s;
+        }
+        .bg-mesh .orb:nth-child(3) {
+            width: 450px; height: 450px;
+            background: #06b6d4;
+            bottom: -5%; left: 30%;
+            animation-delay: -14s;
+        }
+
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(60px, -40px) scale(1.1); }
+            66% { transform: translate(-40px, 30px) scale(0.95); }
+        }
+
+        /* ══════════ NAVIGATION ══════════ */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 0 2rem;
+            backdrop-filter: blur(20px) saturate(180%);
+            background: rgba(10, 14, 26, 0.75);
+            border-bottom: 1px solid var(--border-glass);
+            transition: var(--transition-smooth);
+        }
+
+        .nav.scrolled {
+            background: rgba(10, 14, 26, 0.92);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .nav-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .nav-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--gradient-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+            color: white;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .nav-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 4px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 8px;
+            transition: var(--transition-smooth);
+            position: relative;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--accent-indigo);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        .nav-links a.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 2px;
+            background: var(--accent-indigo);
+            border-radius: 2px;
+        }
+
+        /* ══════════ HERO ══════════ */
+        .hero {
+            position: relative;
+            z-index: 1;
+            padding: 120px 2rem 60px;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: 100px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-indigo);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 24px;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .hero-badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-indigo);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .hero h1 {
+            font-size: clamp(2.2rem, 5vw, 3.8rem);
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+            margin-bottom: 16px;
+            animation: fadeInUp 0.8s ease-out 0.1s both;
+        }
+
+        .hero h1 .gradient-text {
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-sub {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 40px;
+            font-weight: 400;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ══════════ KPI STRIP ══════════ */
+        .kpi-strip {
+            position: relative;
+            z-index: 1;
+            max-width: 1280px;
+            margin: 0 auto 60px;
+            padding: 0 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            backdrop-filter: blur(12px);
+            transition: var(--transition-smooth);
+            animation: fadeInUp 0.6s ease-out both;
+            cursor: default;
+        }
+
+        .kpi-card:nth-child(1) { animation-delay: 0.1s; }
+        .kpi-card:nth-child(2) { animation-delay: 0.2s; }
+        .kpi-card:nth-child(3) { animation-delay: 0.3s; }
+        .kpi-card:nth-child(4) { animation-delay: 0.4s; }
+        .kpi-card:nth-child(5) { animation-delay: 0.5s; }
+
+        .kpi-card:hover {
+            border-color: var(--border-glass-hover);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .kpi-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 14px;
+        }
+
+        .kpi-icon.indigo { background: rgba(99, 102, 241, 0.15); }
+        .kpi-icon.cyan { background: rgba(6, 182, 212, 0.15); }
+        .kpi-icon.emerald { background: rgba(16, 185, 129, 0.15); }
+        .kpi-icon.amber { background: rgba(245, 158, 11, 0.15); }
+        .kpi-icon.rose { background: rgba(244, 63, 94, 0.15); }
+
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .kpi-value.count {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* ══════════ SECTIONS ══════════ */
+        .content {
+            position: relative;
+            z-index: 1;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 2rem 80px;
+        }
+
+        .section {
+            margin-bottom: 48px;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+        }
+
+        .section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 24px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-number {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .section-header h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            flex-grow: 1;
+        }
+
+        .section-toggle {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-glass);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 18px;
+            transition: var(--transition-smooth);
+            flex-shrink: 0;
+        }
+
+        .section-toggle:hover {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent-indigo);
+        }
+
+        .section-toggle svg {
+            transition: transform 0.3s ease;
+        }
+
+        .section.collapsed .section-toggle svg {
+            transform: rotate(-90deg);
+        }
+
+        .section-body {
+            max-height: 4000px;
+            overflow: hidden;
+            transition: max-height 0.5s ease, opacity 0.3s ease;
+        }
+
+        .section.collapsed .section-body {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        /* ══════════ GLASS CARD ══════════ */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            backdrop-filter: blur(16px);
+            box-shadow: var(--shadow-card);
+            transition: var(--transition-smooth);
+        }
+
+        .glass-card:hover {
+            border-color: var(--border-glass-hover);
+            box-shadow: var(--shadow-glow), var(--shadow-card);
+        }
+
+        /* ══════════ CONNECTION BLOCK ══════════ */
+        .conn-block {
+            background: rgba(6, 182, 212, 0.04);
+            border: 1px solid rgba(6, 182, 212, 0.12);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .conn-block-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .conn-string {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--text-secondary);
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            overflow-x: auto;
+            word-break: break-all;
+        }
+
+        .conn-string .hl-key {
+            color: var(--accent-cyan);
+        }
+
+        .conn-string .hl-val {
+            color: var(--accent-emerald);
+        }
+
+        .conn-string .hl-warn {
+            color: var(--accent-amber);
+        }
+
+        .file-ref {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: 6px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--accent-indigo);
+            text-decoration: none;
+            transition: var(--transition-smooth);
+        }
+
+        .file-ref:hover {
+            background: rgba(99, 102, 241, 0.18);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tag-entry { background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo); }
+        .tag-line { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+
+        /* ══════════ TABLES ══════════ */
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-glass);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13.5px;
+        }
+
+        thead {
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        thead th {
+            padding: 14px 18px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-glass);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+            vertical-align: top;
+        }
+
+        tbody tr {
+            transition: var(--transition-smooth);
+        }
+
+        tbody tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        td .module-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        td .file-mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-purple);
+        }
+
+        td .tables-list {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px;
+            color: var(--accent-cyan);
+            line-height: 1.9;
+        }
+
+        /* ══════════ FLOW DIRECTION BADGES ══════════ */
+        .flow-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .flow-badge.upload {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-indigo);
+        }
+
+        .flow-badge.download {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--accent-emerald);
+        }
+
+        .flow-badge.bidirectional {
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--accent-amber);
+        }
+
+        /* ══════════ ALERT BOXES ══════════ */
+        .alert {
+            display: flex;
+            gap: 14px;
+            padding: 18px 20px;
+            border-radius: var(--radius-md);
+            margin: 20px 0;
+            font-size: 13.5px;
+            line-height: 1.6;
+        }
+
+        .alert-icon {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            margin-top: 1px;
+        }
+
+        .alert.warning {
+            background: rgba(245, 158, 11, 0.06);
+            border: 1px solid rgba(245, 158, 11, 0.15);
+            color: var(--accent-amber);
+        }
+
+        .alert.danger {
+            background: rgba(244, 63, 94, 0.06);
+            border: 1px solid rgba(244, 63, 94, 0.15);
+            color: var(--accent-rose);
+        }
+
+        .alert.info {
+            background: rgba(6, 182, 212, 0.06);
+            border: 1px solid rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+        }
+
+        /* ══════════ CYCLE SUMMARY ══════════ */
+        .cycle-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            position: relative;
+        }
+
+        .cycle-step {
+            display: flex;
+            gap: 20px;
+            padding: 24px 0;
+            position: relative;
+        }
+
+        .cycle-step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 19px;
+            top: 60px;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(180deg, var(--accent-indigo) 0%, rgba(99, 102, 241, 0.1) 100%);
+        }
+
+        .step-indicator {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            color: white;
+            flex-shrink: 0;
+            z-index: 1;
+        }
+
+        .step-content h4 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        .step-content p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        .step-content .mono-highlight {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent-purple);
+        }
+
+        /* ══════════ DIAGRAM ══════════ */
+        .diagram-container {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
+        }
+
+        .diagram-container .mermaid {
+            width: 100%;
+            max-width: 960px;
+        }
+
+        .diagram-container svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ══════════ CONN TABLE ══════════ */
+        .conn-table-container {
+            margin-top: 20px;
+        }
+
+        .server-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .server-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse-dot 2.5s ease-in-out infinite;
+        }
+
+        .server-dot.active { background: var(--accent-emerald); }
+        .server-dot.legacy { background: var(--accent-amber); }
+
+        /* ══════════ FOOTER ══════════ */
+        .footer {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 40px 2rem;
+            border-top: 1px solid var(--border-glass);
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .footer span {
+            color: var(--accent-indigo);
+            font-weight: 600;
+        }
+
+        /* ══════════ RESPONSIVE ══════════ */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+            .hero { padding: 100px 1.5rem 40px; }
+            .content { padding: 0 1rem 60px; }
+            .glass-card { padding: 20px; }
+            .cycle-step { gap: 14px; }
+        }
+
+        @media (max-width: 480px) {
+            .kpi-strip { grid-template-columns: 1fr; }
+        }
+
+        /* ══════════ SCROLLBAR ══════════ */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.25); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.4); }
+
+        /* ══════════ PATTERN TAG ══════════ */
+        .pattern-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 4px;
+        }
+        .pattern-tag.delete { background: rgba(244, 63, 94, 0.1); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.15); }
+        .pattern-tag.insert { background: rgba(16, 185, 129, 0.1); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.15); }
+        .pattern-tag.loop { background: rgba(245, 158, 11, 0.1); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.15); }
+        .pattern-tag.connect { background: rgba(6, 182, 212, 0.1); color: var(--accent-cyan); border: 1px solid rgba(6, 182, 212, 0.15); }
+        .pattern-tag.disconnect { background: rgba(99, 102, 241, 0.1); color: var(--accent-indigo); border: 1px solid rgba(99, 102, 241, 0.15); }
+
+        /* Mermaid overrides for dark theme */
+        .mermaid .nodeLabel { font-family: 'Inter', sans-serif !important; }
+    </style>
+</head>
+<body>
+
+<!-- ═══ ANIMATED BACKGROUND ═══ -->
+<div class="bg-mesh">
+    <div class="orb"></div>
+    <div class="orb"></div>
+    <div class="orb"></div>
+</div>
+
+<!-- ═══ NAVIGATION ═══ -->
+<nav class="nav" id="mainNav">
+    <div class="nav-inner">
+        <a href="#top" class="nav-brand">
+            <div class="nav-logo">LS</div>
+            <div class="nav-title">LiderPlusSync</div>
+        </a>
+        <ul class="nav-links">
+            <li><a href="#conexion" class="active" data-section="conexion">Conexión</a></li>
+            <li><a href="#modulos" data-section="modulos">Módulos</a></li>
+            <li><a href="#ciclo" data-section="ciclo">Ciclo</a></li>
+            <li><a href="#diagrama" data-section="diagrama">Arquitectura</a></li>
+            <li><a href="#servidores" data-section="servidores">Servidores</a></li>
+        </ul>
+    </div>
+</nav>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero" id="top">
+    <div class="hero-badge">
+        <span class="dot"></span>
+        Ingeniería Inversa — Visual FoxPro
+    </div>
+    <h1>
+        Reporte de Arquitectura<br>
+        <span class="gradient-text">LiderPlusSync</span>
+    </h1>
+    <p class="hero-sub">
+        Mapeo completo del sincronizador ODBC → MySQL legacy. 
+        Análisis de conexiones, flujos de datos y módulos de negocio.
+    </p>
+</section>
+
+<!-- ═══ KPI STRIP ═══ -->
+<div class="kpi-strip">
+    <div class="kpi-card">
+        <div class="kpi-icon indigo">📁</div>
+        <div class="kpi-value count">26+</div>
+        <div class="kpi-label">Archivos .PRG analizados</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon cyan">🔗</div>
+        <div class="kpi-value count">18</div>
+        <div class="kpi-label">Conexiones SQLSTRINGCONNECT</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon emerald">⚡</div>
+        <div class="kpi-value count">50+</div>
+        <div class="kpi-label">Llamadas SQLEXEC</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon amber">📊</div>
+        <div class="kpi-value count">10</div>
+        <div class="kpi-label">Módulos de sincronización</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon rose">🔄</div>
+        <div class="kpi-value count">3</div>
+        <div class="kpi-label">Timers VFP activos</div>
+    </div>
+</div>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<div class="content">
+
+    <!-- ── SECTION 1: CONNECTION ── -->
+    <section class="section" id="conexion">
+        <div class="section-header" onclick="toggleSection(this)">
+            <div class="section-number" style="background: var(--gradient-cyan);">1</div>
+            <h2>Rutina Principal de Conexión a MySQL</h2>
+            <div class="section-toggle">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="glass-card">
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                    El punto de entrada es <span class="file-ref">📄 principal.prg</span> <span class="tag tag-line">líneas 30-33</span>.
+                    Declara la variable <code style="color: var(--accent-purple);">PUBLIC lcStringConexion</code> con la cadena ODBC que heredan todos los módulos.
+                </p>
+
+                <div class="conn-block">
+                    <div class="conn-block-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                        Cadena de conexión activa (producción)
+                    </div>
+                    <div class="conn-string">
+<span class="hl-key">Driver=</span><span class="hl-val">{MySQL ODBC 3.51 Driver}</span>;
+<span class="hl-key">Server=</span><span class="hl-val">40.160.61.158</span>;
+<span class="hl-key">Database=</span><span class="hl-val">chocola2_liderplus</span>;
+<span class="hl-key">User=</span><span class="hl-val">chocola2_liderplus</span>;
+<span class="hl-key">Password=</span><span class="hl-warn">Liderplus2026*</span>;
+<span class="hl-key">Option=</span><span class="hl-val">3</span>
+                    </div>
+                </div>
+
+                <div class="alert warning">
+                    <div class="alert-icon">⚠️</div>
+                    <div>
+                        <strong>Credenciales expuestas:</strong> La cadena de conexión está hardcodeada en texto plano. 
+                        Además, cada módulo .PRG contiene su propia copia (muchas comentadas con <code>**</code>), 
+                        con al menos <strong>6 servidores distintos</strong> a lo largo del código. Se cambiaban manualmente por cliente.
+                    </div>
+                </div>
+
+                <div class="alert info">
+                    <div class="alert-icon">ℹ️</div>
+                    <div>
+                        <strong>Flag API REST:</strong> La variable <code style="color: var(--accent-purple);">llApiRest</code> (leída de <code>respaldos.lapi_rest</code>) 
+                        determina si el sistema usa ODBC directo o API REST como canal alternativo. Se configuró mediante <span class="file-ref">setup_api_sync.prg</span>.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── SECTION 2: MODULES ── -->
+    <section class="section" id="modulos">
+        <div class="section-header" onclick="toggleSection(this)">
+            <div class="section-number" style="background: var(--gradient-main);">2</div>
+            <h2>Módulos de Inserción / Actualización</h2>
+            <div class="section-toggle">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="glass-card" style="margin-bottom: 20px;">
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">
+                    Cada dominio de datos tiene su propio <code>.prg</code> autocontenido. El patrón es uniforme en todos:
+                </p>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+                    <span class="pattern-tag connect">① SQLSTRINGCONNECT</span>
+                    <span class="pattern-tag delete">② DELETE FROM tabla</span>
+                    <span class="pattern-tag loop">③ DO WHILE !EOF()</span>
+                    <span class="pattern-tag insert">④ SQLEXEC(INSERT)</span>
+                    <span class="pattern-tag disconnect">⑤ SQLDISCONNECT</span>
+                </div>
+                <p style="color: var(--text-muted); font-size: 13px;">
+                    Es un <strong style="color: var(--accent-rose);">full-replace por tabla</strong> (no sync incremental), excepto <code>tsincronizacion</code> que guarda timestamps.
+                </p>
+            </div>
+
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; font-size: 12px;">Canal ODBC Directo</h3>
+            <div class="table-wrapper" style="margin-bottom: 24px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Módulo</th>
+                            <th>Archivo</th>
+                            <th>Flujo</th>
+                            <th>Tablas MySQL afectadas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="module-name">Inventario</span></td>
+                            <td><span class="file-mono">inventario.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">tproductos, tproductos_precio, tproductos_almacen, tvendedores_almacen, tlineas, tcontroles, ttipos_moneda</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">CxC</span></td>
+                            <td><span class="file-mono">cxc.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">tfacturas, tdetalles_factura, tclientes, tdocumentos_cxc, ttipos_documentocxc, tvendedores</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Cajas</span></td>
+                            <td><span class="file-mono">cajas.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">tdetalles_pago_factura, tdetalles_pago_recibo, tgastos, tsincronizacion</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Pedidos</span></td>
+                            <td><span class="file-mono">pedidos.prg</span></td>
+                            <td><span class="flow-badge download">↓ Recepción</span></td>
+                            <td><span class="tables-list">Lee pedidos desde MySQL → escribe en DBFs locales</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Devoluciones</span></td>
+                            <td><span class="file-mono">devoluciones.prg</span></td>
+                            <td><span class="flow-badge bidirectional">↕ Bidireccional</span></td>
+                            <td><span class="tables-list">tdevoluciones_venta, tdetalles_devolucion_venta → UPDATE status</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Recibos</span></td>
+                            <td><span class="file-mono">recibos.prg</span></td>
+                            <td><span class="flow-badge download">↓ Recepción</span></td>
+                            <td><span class="tables-list">Lee recibos desde MySQL → inserta en DBFs locales</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Visitas</span></td>
+                            <td><span class="file-mono">visitas.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">Sincronización de visitas de vendedores</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Web</span></td>
+                            <td><span class="file-mono">web.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">Sync con WordPress/WooCommerce (autorepu_wordpress_6)</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Mov. Casa Central</span></td>
+                            <td><span class="file-mono">movimientos_ca.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">Movimientos de casa central</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="module-name">Inv. Sucursales</span></td>
+                            <td><span class="file-mono">inventario_*2.prg</span></td>
+                            <td><span class="flow-badge upload">↑ Envío</span></td>
+                            <td><span class="tables-list">Clones por sucursal filtrando cid_almace (boutique, maxi, imports, sports)</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; font-size: 12px;">Canal API REST (alternativo)</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Archivo</th>
+                            <th>Función</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="file-mono">sincronizar_api.prg</span></td>
+                            <td>Orquestador secuencial: ejecuta pedidos → visitas → devoluciones → recibos → inventario → cxc vía API</td>
+                        </tr>
+                        <tr>
+                            <td><span class="file-mono">api_helper.prg</span></td>
+                            <td>Funciones auxiliares HTTP para el canal API REST</td>
+                        </tr>
+                        <tr>
+                            <td><span class="file-mono">*_api.prg</span></td>
+                            <td>Versiones API de cada módulo (pedidos_api, cxc_api, inventario_api, etc.)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── SECTION 3: CYCLE ── -->
+    <section class="section" id="ciclo">
+        <div class="section-header" onclick="toggleSection(this)">
+            <div class="section-number" style="background: var(--gradient-emerald);">3</div>
+            <h2>Ciclo de Sincronización</h2>
+            <div class="section-toggle">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="glass-card">
+                <div class="alert info" style="margin-top: 0;">
+                    <div class="alert-icon">🔑</div>
+                    <div>
+                        <strong>No usan DO WHILE como loop principal ni polling en código PRG.</strong> 
+                        Usan controles <code style="color: var(--accent-cyan);">Timer</code> nativos de VFP embebidos en el formulario <code>frmrespaldos.scx</code>.
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 24px 0;">
+                    <div style="background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.12); border-radius: 12px; padding: 18px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">📤</div>
+                        <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">tmrEnviar</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Dispara envío de datos</div>
+                        <div style="font-size: 11px; color: var(--accent-indigo); margin-top: 6px;">inventario + cxc + cajas</div>
+                    </div>
+                    <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 12px; padding: 18px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">📥</div>
+                        <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">tmrRecibir</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Dispara recepción de datos</div>
+                        <div style="font-size: 11px; color: var(--accent-emerald); margin-top: 6px;">pedidos + recibos + devoluciones</div>
+                    </div>
+                    <div style="background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.12); border-radius: 12px; padding: 18px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">⏱️</div>
+                        <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">Timer1</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Timer auxiliar</div>
+                        <div style="font-size: 11px; color: var(--accent-amber); margin-top: 6px;">Se auto-deshabilita tras ejecutar</div>
+                    </div>
+                </div>
+
+                <h3 style="font-size: 15px; font-weight: 700; margin: 28px 0 16px; color: var(--text-primary);">Flujo de ejecución paso a paso</h3>
+
+                <div class="cycle-steps">
+                    <div class="cycle-step">
+                        <div class="step-indicator" style="background: var(--gradient-main);">1</div>
+                        <div class="step-content">
+                            <h4>Inicio de la aplicación</h4>
+                            <p>
+                                <span class="mono-highlight">principal.prg</span> abre el formulario con 
+                                <span class="mono-highlight">DO FORM frmrespaldos</span> + <span class="mono-highlight">READ EVENTS</span>. 
+                                El formulario queda residente con los controles Timer configurados con un <code>TimerInterval</code> en milisegundos.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="cycle-step">
+                        <div class="step-indicator" style="background: var(--gradient-cyan);">2</div>
+                        <div class="step-content">
+                            <h4>Disparo automático por Timer</h4>
+                            <p>
+                                Cada <span class="mono-highlight">Timer.TimerEvent</span> llama a los métodos 
+                                <span class="mono-highlight">EJECUTAR_TAREA</span> (envío) y 
+                                <span class="mono-highlight">EJECUTAR_TAREA_REC</span> (recepción) del formulario. 
+                                Internamente ejecutan <span class="mono-highlight">DO inventario</span>, <span class="mono-highlight">DO cxc</span>, 
+                                <span class="mono-highlight">DO pedidos</span>, etc.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="cycle-step">
+                        <div class="step-indicator" style="background: var(--gradient-emerald);">3</div>
+                        <div class="step-content">
+                            <h4>Ejecución dentro de cada módulo</h4>
+                            <p>
+                                Cada PRG abre su propia conexión ODBC con <span class="mono-highlight">SQLSTRINGCONNECT</span>, 
+                                ejecuta <span class="mono-highlight">DELETE FROM tabla</span> (borrado total), 
+                                recorre el cursor local con <span class="mono-highlight">DO WHILE !EOF()</span>, 
+                                inserta fila a fila con <span class="mono-highlight">SQLEXEC(INSERT)</span>, 
+                                y cierra con <span class="mono-highlight">SQLDISCONNECT</span>.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert danger" style="margin-top: 20px;">
+                    <div class="alert-icon">🔴</div>
+                    <div>
+                        <strong>Riesgo crítico:</strong> El patrón DELETE + INSERT significa que durante la sincronización 
+                        hay una ventana de tiempo donde los datos en MySQL están <strong>vacíos</strong>. 
+                        Si el proceso falla a mitad, se pierde data parcialmente.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── SECTION 4: DIAGRAM ── -->
+    <section class="section" id="diagrama">
+        <div class="section-header" onclick="toggleSection(this)">
+            <div class="section-number" style="background: var(--gradient-amber);">4</div>
+            <h2>Diagrama de Arquitectura</h2>
+            <div class="section-toggle">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="glass-card">
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    subgraph EP["🚀 Entry Point"]
+        PP["principal.prg\nPUBLIC lcStringConexion"]
+    end
+
+    subgraph UI["🖥️ UI / Orquestación"]
+        FRM["frmrespaldos.scx\n(Formulario VFP)"]
+        TMR_E["⏱ tmrEnviar"]
+        TMR_R["⏱ tmrRecibir"]
+    end
+
+    subgraph ODBC["📡 Canal ODBC Directo"]
+        INV["inventario.prg"]
+        CXC["cxc.prg"]
+        CAJ["cajas.prg"]
+        PED["pedidos.prg"]
+        DEV["devoluciones.prg"]
+        REC["recibos.prg"]
+        VIS["visitas.prg"]
+        WEB["web.prg"]
+    end
+
+    subgraph APIC["🌐 Canal API REST"]
+        SYNC_API["sincronizar_api.prg"]
+        API_H["api_helper.prg"]
+        P_API["*_api.prg"]
+    end
+
+    MYSQL[("🗄️ MySQL Server\nODBC 3.51")]
+    API[("🌐 API REST\nEndpoint")]
+
+    PP --> FRM
+    FRM --> TMR_E
+    FRM --> TMR_R
+    TMR_E -->|"EJECUTAR_TAREA"| INV
+    TMR_E -->|"EJECUTAR_TAREA"| CXC
+    TMR_E -->|"EJECUTAR_TAREA"| CAJ
+    TMR_R -->|"EJECUTAR_TAREA_REC"| PED
+    TMR_R -->|"EJECUTAR_TAREA_REC"| DEV
+    TMR_R -->|"EJECUTAR_TAREA_REC"| REC
+    FRM -.->|"llApiRest=.T."| SYNC_API
+    SYNC_API --> P_API
+    P_API --> API_H
+    API_H --> API
+    INV --> MYSQL
+    CXC --> MYSQL
+    CAJ --> MYSQL
+    PED --> MYSQL
+    DEV --> MYSQL
+    REC --> MYSQL
+    VIS --> MYSQL
+    WEB --> MYSQL
+
+    style EP fill:#1e1b4b,stroke:#6366f1,color:#e0e7ff
+    style UI fill:#1a1a2e,stroke:#8b5cf6,color:#e0e7ff
+    style ODBC fill:#0c1a2e,stroke:#06b6d4,color:#cffafe
+    style APIC fill:#1a1a0c,stroke:#d97706,color:#fef3c7
+    style MYSQL fill:#064e3b,stroke:#34d399,color:#d1fae5
+    style API fill:#7c2d12,stroke:#fb923c,color:#fed7aa
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── SECTION 5: SERVERS ── -->
+    <section class="section" id="servidores">
+        <div class="section-header" onclick="toggleSection(this)">
+            <div class="section-number" style="background: var(--gradient-rose);">5</div>
+            <h2>Cadenas de Conexión Activas</h2>
+            <div class="section-toggle">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="glass-card">
+                <div class="conn-table-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Variable</th>
+                                    <th>Servidor</th>
+                                    <th>Base de Datos</th>
+                                    <th>Módulos que la usan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><span class="file-mono">lcStringConexion</span></td>
+                                    <td>
+                                        <span class="server-badge">
+                                            <span class="server-dot active"></span>
+                                            40.160.61.158
+                                        </span>
+                                    </td>
+                                    <td><span class="file-mono">chocola2_liderplus</span></td>
+                                    <td style="color: var(--text-secondary); font-size: 13px;">principal, pedidos, devoluciones, visitas, recibos</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="file-mono">lcstringcnxlocal</span></td>
+                                    <td>
+                                        <span class="server-badge">
+                                            <span class="server-dot active"></span>
+                                            200.74.207.9
+                                        </span>
+                                    </td>
+                                    <td><span class="file-mono">bdferreperiquitos</span></td>
+                                    <td style="color: var(--text-secondary); font-size: 13px;">cajas, inventario_boutique*, inventario_ca2, inventario_imports*, inventario_maxi*, inventario_sports*, movimientos_ca</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="file-mono">lcstringcnxlocal</span></td>
+                                    <td>
+                                        <span class="server-badge">
+                                            <span class="server-dot legacy"></span>
+                                            204.12.208.38
+                                        </span>
+                                    </td>
+                                    <td><span class="file-mono">autorepu_wordpress_6</span></td>
+                                    <td style="color: var(--text-secondary); font-size: 13px;">web.prg (WooCommerce)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="alert danger" style="margin-top: 20px;">
+                    <div class="alert-icon">🔐</div>
+                    <div>
+                        <strong>Seguridad — Credenciales en texto plano:</strong> 
+                        Todas las contraseñas están expuestas directamente en el código fuente de los archivos .PRG. 
+                        Se recomienda enérgicamente migrarlas a un archivo de configuración externo cifrado o variables de entorno 
+                        en cualquier reescritura del sistema.
+                    </div>
+                </div>
+
+                <div class="alert warning" style="margin-top: 12px;">
+                    <div class="alert-icon">📌</div>
+                    <div>
+                        <strong>Historial de servidores comentados:</strong> 
+                        Se encontraron al menos 6 cadenas de conexión distintas comentadas con <code>**</code> a lo largo del código, 
+                        apuntando a servidores como <code>148.66.136.54</code>, <code>108.179.194.12</code>, <code>198.50.175.169</code> y <code>localhost</code>. 
+                        Esto indica que el deploy por cliente se hacía editando código manualmente.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="footer">
+    <p>
+        Reporte generado el <span>3 de septiembre de 2026</span> · 
+        Análisis de ingeniería inversa sobre <span>Visual FoxPro 9.0</span> · 
+        Proyecto <span>LiderPlusSync</span>
+    </p>
+</footer>
+
+<script>
+    // ═══ MERMAID INIT ═══
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+            primaryColor: '#312e81',
+            primaryTextColor: '#e0e7ff',
+            primaryBorderColor: '#6366f1',
+            lineColor: '#6366f1',
+            secondaryColor: '#1e1b4b',
+            tertiaryColor: '#0c1a2e',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: '13px'
+        },
+        flowchart: {
+            curve: 'basis',
+            padding: 20,
+            nodeSpacing: 30,
+            rankSpacing: 50,
+            htmlLabels: true
+        }
+    });
+
+    // ═══ SCROLL NAV EFFECT ═══
+    const nav = document.getElementById('mainNav');
+    window.addEventListener('scroll', () => {
+        nav.classList.toggle('scrolled', window.scrollY > 20);
+    });
+
+    // ═══ SECTION TOGGLE ═══
+    function toggleSection(header) {
+        const section = header.closest('.section');
+        section.classList.toggle('collapsed');
+    }
+
+    // ═══ SCROLL REVEAL ═══
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px 0px -60px 0px',
+        threshold: 0.1
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, observerOptions);
+
+    document.querySelectorAll('.section').forEach(section => {
+        observer.observe(section);
+    });
+
+    // ═══ ACTIVE NAV LINK ═══
+    const sections = document.querySelectorAll('.section');
+    const navLinks = document.querySelectorAll('.nav-links a');
+
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(section => {
+            const top = section.offsetTop - 120;
+            if (window.scrollY >= top) {
+                current = section.id;
+            }
+        });
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('data-section') === current) {
+                link.classList.add('active');
+            }
+        });
+    });
+
+    // ═══ KPI COUNTER ANIMATION ═══
+    function animateCounters() {
+        document.querySelectorAll('.kpi-value.count').forEach(el => {
+            const target = el.textContent;
+            const numMatch = target.match(/(\d+)/);
+            if (!numMatch) return;
+            
+            const finalNum = parseInt(numMatch[1]);
+            const suffix = target.replace(numMatch[0], '').trim();
+            const prefix = target.substring(0, target.indexOf(numMatch[0]));
+            let current = 0;
+            const increment = Math.max(1, Math.ceil(finalNum / 40));
+            const duration = 1200;
+            const stepTime = duration / (finalNum / increment);
+
+            const counter = setInterval(() => {
+                current += increment;
+                if (current >= finalNum) {
+                    current = finalNum;
+                    clearInterval(counter);
+                }
+                el.textContent = prefix + current + suffix;
+            }, stepTime);
+        });
+    }
+
+    // Trigger on load
+    window.addEventListener('load', () => {
+        setTimeout(animateCounters, 600);
+    });
+
+    // ═══ SMOOTH SCROLL FOR NAV ═══
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetId = link.getAttribute('href').substring(1);
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

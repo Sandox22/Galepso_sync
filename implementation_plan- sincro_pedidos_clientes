@@ -1,0 +1,39 @@
+# Correcciones al Backend de Sincronización (FoxPro)
+
+He analizado a fondo los problemas en el entorno de VFP (FoxPro a MariaDB) y propongo la siguiente solución técnica.
+
+## 1. Problemas de Interfaz y Bloqueos (Modo Headless)
+Actualmente `sincronizar.prg` cuenta con `_SCREEN.Visible = .F.` y `SYS(2335, 0)`, pero estos no evitan completamente que VFP parpadee o que diálogos nativos como cuadros de error o "acceso denegado" salten bajo ciertas condiciones.
+**Propuesta:**
+- Inyectar al principio de `sincronizar.prg` variables y sentencias defensivas rigurosas: `SET CPDIALOG OFF`, `SET TABLEPROMPT OFF`, y `SET REPROCESS TO AUTOMATIC` para manejar los bloqueos compartidos silenciosamente.
+- Refinar el `ManejadorErrores` para asegurar que cierre todo incondicionalmente con `QUIT` ante el más mínimo error fatal sin interactuar.
+- (Nota: Si el .exe parpadea, te recomendaré que tengas un archivo `config.fpw` con `SCREEN=OFF` en la misma carpeta del compilado).
+
+## 2. Corrupción del ID de Cliente (`00000`)
+El problema de que "CLIENTE A" (ID 10003) se mapee a `00000` radica en cómo VFP lee y castea el dato desde ODBC/MariaDB hacia las DBF locales durante la bajada (el volcado desde la nube), y posiblemente cómo se sube inicialmente.
+**Hallazgos técnicos:**
+- Cuando el ID numérico "10003" se pasa desde MariaDB o si el campo `CNX_CLT_GALEXO` no viene como string (ej. ODBC lo mapea como numérico `N`), la validación local `TYPE("cur_clt_nube.CNX_CLT_GALEXO") = "C"` falla y la aplicación lo trata como vacío.
+- Además, al usar `PADL("0", 5, "0")` o `PADL(ALLTRIM(TRANSFORM(campo)))` cuando el campo es numérico/nulo, VFP rellena con ceros, dando como resultado `"00000"`. Luego el pedido queda amarrado al ID `00000` en `tpedidos`, que causa que el nombre salga en blanco en la UI de Galepso.
+
+## Proposed Changes
+
+### [MODIFY] [sincronizar.prg](file:///C:/GalepsoSync/sincronizar.prg)
+- **Modo Sigiloso:** Se añadirán `SET CPDIALOG OFF`, `SET REPROCESS TO 2 SECONDS` o `AUTOMATIC`, asegurando cero interrupción.
+- **Normalización de IDs (Subida):** En `SyncClientes` se forzará la normalización estricta al volcar hacia MariaDB, haciendo que `lcCod = PADL(ALLTRIM(TRANSFORM(cid_clien)), 5, "0")`, garantizando que NUNCA se vaya un ID inválido, con ceros a la izquierda, previniendo que luego se devuelva mal.
+- **Módulo de Pedidos (Bajada):** Observo que `sincronizar.prg` no invoca a la bajada de pedidos, ¡y `config.json` dice que `"pedidos": true`! Integraré la llamada a la bajada de pedidos y/o unificaré el código de `pedidos.prg` dentro de `sincronizar.prg` si la directiva de "aplicar correcciones directamente en sincronizar.prg" implica unificarlo (ver pregunta abierta abajo).
+
+### [MODIFY] [prg/pedidos.prg](file:///C:/GalepsoSync/prg/pedidos.prg)
+- **Normalización de IDs (Bajada):** Si mantenemos `pedidos.prg` separado, en la extracción del ID del cliente corregiré la validación de tipo, reemplazando la débil comprobación por:
+```foxpro
+LOCAL lcGalexoID
+lcGalexoID = ALLTRIM(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_GALEXO, "")))
+IF !EMPTY(lcGalexoID) AND lcGalexoID <> "0"
+    lcCidCliente = PADL(lcGalexoID, 5, '0')
+ELSE
+    * ... autogenerar
+```
+Esto evita la creación del cliente `00000`.
+
+> [!WARNING]
+> ## Open Questions
+> Has especificado "aplica las correcciones técnicas necesarias directamente en sincronizar.prg". Sin embargo, la lógica actual de bajada de pedidos (donde el error `00000` afecta el volcado local de datos) se encuentra en `C:\GalepsoSync\prg\pedidos.prg`. ¿Deseas que corrija `sincronizar.prg` Y `pedidos.prg`, o prefieres que mueva todo el código de `pedidos.prg` a `sincronizar.prg` para tener un único archivo autoconteindo? (Recomiendo modificar ambos por separado y simplemente llamar a `pedidos.prg` desde `sincronizar.prg`).
