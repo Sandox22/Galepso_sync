@@ -26,6 +26,9 @@ sync_log.txt
 error_sync.txt
 log.txt
 
+# --- Repositorios externos ---
+agent-skills/
+
 # --- IDE / Editor ---
 .vscode/
 *.swp
