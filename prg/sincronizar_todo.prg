@@ -38,6 +38,7 @@ ENDIF
 
 * Ejecución de módulos respetando el flujo bidireccional
 DO clientes.prg WITH lnhandle
+DO vendedores.prg WITH lnhandle
 DO pedidos.prg WITH lnhandle
 DO estados.prg WITH lnhandle
 DO municipios.prg WITH lnhandle

@@ -58,7 +58,7 @@ LOCAL lnResBajada
 lnResBajada = SQLEXEC(tnH, ;
     "SELECT cnx_clt_codigo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo, cnx_clt_mpo_codigo, cnx_clt_direccion1, cnx_clt_telefono1 " + ;
     "FROM conex_clientes " + ;
-    "WHERE cnx_clt_check = 0 AND (cnx_clt_galexo IS NULL OR TRIM(cnx_clt_galexo) = '')", ;
+    "WHERE cnx_clt_galexo IS NULL OR TRIM(cnx_clt_galexo) = ''", ;
     "curNubeBajada")
 
 IF lnResBajada > 0
@@ -81,12 +81,12 @@ IF lnResBajada > 0 AND RECCOUNT("curNubeBajada") > 0
         * Insertar en tabla local
         INSERT INTO tclientes (cid_clien, cnombre_cl, crif_cli, cid_estadc, cid_ciudac, cdir_cli1, ctele_cli, cnit_cli) ;
             VALUES (lcNewCid, ;
-                    curNubeBajada.cnx_clt_nombre, ;
-                    curNubeBajada.cnx_clt_rif, ;
-                    STR(curNubeBajada.cnx_clt_edo_codigo, 2), ;
-                    STR(curNubeBajada.cnx_clt_mpo_codigo, 2), ;
-                    curNubeBajada.cnx_clt_direccion1, ;
-                    curNubeBajada.cnx_clt_telefono1, ;
+                    NVL(curNubeBajada.cnx_clt_nombre, ""), ;
+                    NVL(curNubeBajada.cnx_clt_rif, ""), ;
+                    STR(NVL(curNubeBajada.cnx_clt_edo_codigo, 1), 2), ;
+                    STR(NVL(curNubeBajada.cnx_clt_mpo_codigo, 1), 2), ;
+                    NVL(curNubeBajada.cnx_clt_direccion1, ""), ;
+                    NVL(curNubeBajada.cnx_clt_telefono1, ""), ;
                     lcNubeCodigo)
 
         * Marcar en la nube como sincronizado devolviendo el nuevo ID local (galexo)
@@ -120,6 +120,114 @@ IF lnMaxCid >= lnOrigNCliente
             PCESTADOENVIA = PCESTADOENVIA + "[Clientes] WARNING: No se pudo bloquear tcontroles para actualizar NCLIENTE" + CHR(13)
         ENDIF
     ENDIF
+ENDIF
+
+* ==============================================================================
+* 1.2 RADAR DE EDICIONES: Actualizar clientes modificados en la nube
+* ==============================================================================
+LOCAL lnResRadar, lnEditados, lcLogRadar
+lnEditados = 0
+lcLogRadar = lcDirData + "sync_radar_audit.txt"
+
+STRTOFILE("===========================================" + CHR(13)+CHR(10), lcLogRadar, 1)
+STRTOFILE(TTOC(DATETIME()) + " - [RADAR] Iniciando extracción de clientes editados..." + CHR(13)+CHR(10), lcLogRadar, 1)
+
+lnResRadar = SQLEXEC(tnH, ;
+    "SELECT cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_direccion1, cnx_clt_rif, cnx_clt_telefono1 " + ;
+    "FROM conex_clientes " + ;
+    "WHERE CNX_CLT_MODIFICADO = 1 AND cnx_clt_galexo IS NOT NULL AND TRIM(cnx_clt_galexo) != ''", ;
+    "curRadarEdiciones")
+
+IF lnResRadar < 0
+    LOCAL ARRAY laErrRadar[1]
+    AERROR(laErrRadar)
+    STRTOFILE("  -> [ERROR SQL] Extracción fallida: " + ALLTRIM(TRANSFORM(laErrRadar[2])) + CHR(13)+CHR(10), lcLogRadar, 1)
+    
+    IF TYPE("PCESTADORECIBE") = "C"
+        PCESTADORECIBE = PCESTADORECIBE + "[Clientes-Radar] ERROR SQL: " + ;
+            ALLTRIM(TRANSFORM(laErrRadar[2])) + " " + TTOC(DATETIME()) + CHR(13)
+    ENDIF
+ELSE
+    STRTOFILE("  -> [OK] Consulta exitosa. Registros extraídos: " + TRANSFORM(RECCOUNT("curRadarEdiciones")) + CHR(13)+CHR(10), lcLogRadar, 1)
+ENDIF
+
+IF lnResRadar > 0 AND RECCOUNT("curRadarEdiciones") > 0
+    SELECT curRadarEdiciones
+    SCAN
+        LOCAL lcGalexo, lcCodigoNube, lcNombre, lcDir, lcRif, lcTel
+        lcCodigoNube = ALLTRIM(curRadarEdiciones.cnx_clt_codigo)
+        lcGalexo     = ALLTRIM(STRTRAN(curRadarEdiciones.cnx_clt_galexo, " ", "")) && Limpieza agresiva del Galexo
+        
+        * Sanitización de NULLs (evita crash "Field does not accept null values" en REPLACE)
+        lcNombre     = NVL(curRadarEdiciones.cnx_clt_nombre, "")
+        lcDir        = NVL(curRadarEdiciones.cnx_clt_direccion1, "")
+        lcRif        = NVL(curRadarEdiciones.cnx_clt_rif, "")
+        lcTel        = NVL(curRadarEdiciones.cnx_clt_telefono1, "")
+
+        STRTOFILE("    > Procesando Nube ID: [" + lcCodigoNube + "] - Buscando Galexo ID local: [" + lcGalexo + "]" + CHR(13)+CHR(10), lcLogRadar, 1)
+
+        * Buscar el cliente local por su cid_clien
+        * Uso STRTRAN también local por si acaso había espacios intermedios
+        SELECT tclientes
+        LOCATE FOR ALLTRIM(STRTRAN(cid_clien, " ", "")) == lcGalexo
+
+        IF FOUND()
+            STRTOFILE("      -> [MATCH ENCONTRADO] Registro cid_clien coincide. Procediendo a REPLACE..." + CHR(13)+CHR(10), lcLogRadar, 1)
+            
+            * Actualizar datos comerciales
+            REPLACE cnombre_cl WITH lcNombre, ;
+                    cdir_cli1 WITH lcDir, ;
+                    crif_cli WITH lcRif, ;
+                    ctele_cli WITH lcTel IN tclientes
+            
+            * Acuse de recibo en la nube (Reset flag)
+            LOCAL lnResReset
+            lnResReset = SQLEXEC(tnH, "UPDATE conex_clientes SET CNX_CLT_MODIFICADO = 0 WHERE cnx_clt_codigo = ?lcCodigoNube")
+            
+            IF lnResReset > 0
+                lnEditados = lnEditados + 1
+                STRTOFILE("      -> [OK NUBE] Flag CNX_CLT_MODIFICADO = 0 reseteado." + CHR(13)+CHR(10), lcLogRadar, 1)
+            ELSE
+                LOCAL ARRAY laErrReset[1]
+                AERROR(laErrReset)
+                STRTOFILE("      -> [ERROR NUBE] Fallo reset del flag: " + ALLTRIM(TRANSFORM(laErrReset[2])) + CHR(13)+CHR(10), lcLogRadar, 1)
+                
+                IF TYPE("PCESTADORECIBE") = "C"
+                    PCESTADORECIBE = PCESTADORECIBE + "[Clientes-Radar] ERROR Reset Nube: " + ;
+                        ALLTRIM(TRANSFORM(laErrReset[2])) + CHR(13)
+                ENDIF
+            ENDIF
+        ELSE
+            STRTOFILE("      -> [NO ENCONTRADO] El LOCATE falló. El código galexo de la nube no coincide con ningún cid_clien local." + CHR(13)+CHR(10), lcLogRadar, 1)
+        ENDIF
+    ENDSCAN
+ENDIF
+
+IF USED("curRadarEdiciones")
+    USE IN curRadarEdiciones
+ENDIF
+
+* Guardar cambios del Radar de Ediciones
+IF lnEditados > 0
+    LOCAL llUpdateExito
+    llUpdateExito = TABLEUPDATE(.T., .T., "tclientes")
+    
+    IF llUpdateExito
+        STRTOFILE("  -> [OK LOCAL] TABLEUPDATE(tclientes) exitoso. Cambios confirmados." + CHR(13)+CHR(10), lcLogRadar, 1)
+    ELSE
+        LOCAL ARRAY laErrUpdate[1]
+        AERROR(laErrUpdate)
+        STRTOFILE("  -> [ERROR LOCAL] TABLEUPDATE fallido: " + ALLTRIM(TRANSFORM(laErrUpdate[2])) + CHR(13)+CHR(10), lcLogRadar, 1)
+    ENDIF
+ENDIF
+
+IF TYPE("PCESTADORECIBE") = "C"
+    PCESTADORECIBE = PCESTADORECIBE + "[Clientes-Radar] Clientes editados descargados: " + ;
+        TRANSFORM(lnEditados) + " " + TTOC(DATETIME()) + CHR(13)
+ENDIF
+
+IF TYPE("contarecibe") = "N"
+    contarecibe = contarecibe + lnEditados
 ENDIF
 
 * ==============================================================================
@@ -193,6 +301,9 @@ SELECT VAL(cid_clien) AS cnx_clt_galexo_val, ;
        cnombre_cl AS cnx_clt_nombre, ;
        crif_cli AS cnx_clt_rif, ;
        cid_estadc AS cnx_clt_edo_codigo, ;
+       cdir_cli1, ;
+       ctele_cli, ;
+       cid_vende, ;
        cid_clien, ;
        cnit_cli ;
 FROM tclientes ;
@@ -206,46 +317,61 @@ ENDIF
 IF RECCOUNT("curSubidaLocal") > 0
     SELECT curSubidaLocal
     SCAN
-        LOCAL lcNombre, lcRif, lnEdoCodigo, lcCidClien, lcAncla
+        LOCAL lcNombre, lcRif, lnEdoCodigo, lcCidClien, lcDir1, lcTel1, lcVenCod
         
-        * Sanitización estricta del código: limpieza rigurosa usando ALLTRIM y STRTRAN 
-        * para garantizar que viaje libre de espacios o caracteres extraños
+        * Sanitización estricta del código
         lcCidClien  = ALLTRIM(STRTRAN(curSubidaLocal.cid_clien, " ", ""))
         
-        lcNombre    = CHRTRAN(ALLTRIM(curSubidaLocal.cnx_clt_nombre), "'", "")
-        lcRif       = ALLTRIM(curSubidaLocal.cnx_clt_rif)
-        lnEdoCodigo = VAL(curSubidaLocal.cnx_clt_edo_codigo)
+        * Sanitización con protección de NULLs
+        lcNombre    = STRTRAN(ALLTRIM(NVL(curSubidaLocal.cnx_clt_nombre, "")), "'", "")
+        lcRif       = ALLTRIM(NVL(curSubidaLocal.cnx_clt_rif, ""))
+        lnEdoCodigo = VAL(NVL(curSubidaLocal.cnx_clt_edo_codigo, "0"))
+        lcDir1      = STRTRAN(ALLTRIM(NVL(curSubidaLocal.cdir_cli1, "")), "'", "")
+        lcTel1      = STRTRAN(ALLTRIM(NVL(curSubidaLocal.ctele_cli, "")), "'", "")
+        lcVenCod    = ALLTRIM(STRTRAN(NVL(curSubidaLocal.cid_vende, ""), " ", ""))
         
-        * 1. Identifica el ancla: Usa cnit_cli (referencia original) si existe, sino asume cid_clien
-        lcAncla = IIF(!EMPTY(curSubidaLocal.cnit_cli), ALLTRIM(curSubidaLocal.cnit_cli), lcCidClien)
+        * 1. Identificar si existe en la nube
+        LOCAL lcSqlCheck, lnResCheck, lcCloudPK
+        lcCloudPK = ""
         
-        LOCAL lcSqlCheck, lnResCheck
-        * 2. Consulta a la nube para verificar existencia
-        lcSqlCheck = "SELECT cnx_clt_galexo FROM conex_clientes WHERE cnx_clt_galexo = ?lcAncla"
-        lnResCheck = SQLEXEC(tnH, lcSqlCheck, 'curCheck')
-        
-        IF lnResCheck < 0
-            LOCAL ARRAY laErrCheck[1]
-            AERROR(laErrCheck)
-            IF TYPE("PCESTADOENVIA") = "C"
-                PCESTADOENVIA = PCESTADOENVIA + " | ERROR CHECK NUBE: " + TRANSFORM(laErrCheck[2])
+        * A) Buscar por la llave original de la nube (cnit_cli) si existe
+        IF !EMPTY(curSubidaLocal.cnit_cli)
+            LOCAL lcSearchNube
+            lcSearchNube = ALLTRIM(curSubidaLocal.cnit_cli)
+            lcSqlCheck = "SELECT cnx_clt_codigo FROM conex_clientes WHERE cnx_clt_codigo = ?lcSearchNube"
+            lnResCheck = SQLEXEC(tnH, lcSqlCheck, 'curCheck')
+            IF lnResCheck > 0 AND RECCOUNT('curCheck') > 0
+                lcCloudPK = ALLTRIM(curCheck.cnx_clt_codigo)
             ENDIF
-            LOOP
+        ENDIF
+        
+        * B) Si no se encontró, buscar por el ancla galexo (cid_clien)
+        IF EMPTY(lcCloudPK)
+            lcSqlCheck = "SELECT cnx_clt_codigo FROM conex_clientes WHERE cnx_clt_galexo = ?lcCidClien"
+            lnResCheck = SQLEXEC(tnH, lcSqlCheck, 'curCheck')
+            IF lnResCheck > 0 AND RECCOUNT('curCheck') > 0
+                lcCloudPK = ALLTRIM(curCheck.cnx_clt_codigo)
+            ENDIF
         ENDIF
         
         LOCAL lcSqlExecute, lnResExecute
-        IF RECCOUNT('curCheck') > 0
-            * 3. Flujo UPDATE (Si existe): Actualiza el registro preservando la identidad del ancla
+        IF !EMPTY(lcCloudPK)
+            * 3. Flujo UPDATE (Si existe): Actualiza el registro
+            * NO sobreescribimos cnx_clt_codigo para respetar cambios en ADN
             lcSqlExecute = "UPDATE conex_clientes SET " + ;
-                           "cnx_clt_codigo = ?lcCidClien, " + ;
+                           "cnx_clt_galexo = ?lcCidClien, " + ;
                            "cnx_clt_nombre = ?lcNombre, " + ;
                            "cnx_clt_rif = ?lcRif, " + ;
-                           "cnx_clt_edo_codigo = ?lnEdoCodigo " + ;
-                           "WHERE cnx_clt_galexo = ?lcAncla"
+                           "cnx_clt_edo_codigo = ?lnEdoCodigo, " + ;
+                           "cnx_clt_direccion1 = ?lcDir1, " + ;
+                           "cnx_clt_telefono1 = ?lcTel1, " + ;
+                           "cnx_clt_ven_codigo = ?lcVenCod " + ;
+                           "WHERE cnx_clt_codigo = ?lcCloudPK"
         ELSE
-            * 4. Flujo INSERT (Si no existe): Inserción nativa inyectando código en ambos
-            lcSqlExecute = "INSERT INTO conex_clientes (cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo) " + ;
-                           "VALUES (?lcCidClien, ?lcCidClien, ?lcNombre, ?lcRif, ?lnEdoCodigo)"
+            * 4. Flujo INSERT (Si no existe): Inserción nativa
+            lcCloudPK = lcCidClien
+            lcSqlExecute = "INSERT INTO conex_clientes (cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo, cnx_clt_direccion1, cnx_clt_telefono1, cnx_clt_ven_codigo) " + ;
+                           "VALUES (?lcCloudPK, ?lcCidClien, ?lcNombre, ?lcRif, ?lnEdoCodigo, ?lcDir1, ?lcTel1, ?lcVenCod)"
         ENDIF
         
         lnResExecute = SQLEXEC(tnH, lcSqlExecute)
@@ -257,8 +383,8 @@ IF RECCOUNT("curSubidaLocal") > 0
                 PCESTADOENVIA = PCESTADOENVIA + " | ERROR SQL NUBE: " + TRANSFORM(laError[2])
             ENDIF
         ELSE
-            * Marca el registro local como ya subido, almacenando el código definitivo
-            UPDATE tclientes SET cnit_cli = lcCidClien WHERE cid_clien = curSubidaLocal.cid_clien
+            * Marca el registro local almacenando el código definitivo
+            UPDATE tclientes SET cnit_cli = lcCloudPK WHERE cid_clien = curSubidaLocal.cid_clien
         ENDIF
         
         IF USED('curCheck')

@@ -143,7 +143,7 @@ DO WHILE !EOF()
     LOCAL llError, lcNumeroNube, lcNewPedidoID, lnNextPedido, lcCidCliente, lcCidVende, lnMontoT
     llError = .F.
     
-    lcNumeroNube = ALLTRIM(TRANSFORM(cur_conex_doc.CNX_DCL_NUMERO))
+    lcNumeroNube = ALLTRIM(TRANSFORM(NVL(cur_conex_doc.CNX_DCL_NUMERO, "")))
     
     * Verificacion preventiva de duplicados (ya procesado pero fallo el acuse en MariaDB)
     SELECT tpedidos
@@ -167,13 +167,13 @@ DO WHILE !EOF()
     
     * Variables de la cabecera
     LOCAL lcCloudCli, lcCloudVen
-    lcCloudCli = ALLTRIM(TRANSFORM(cur_conex_doc.cnx_dcl_clt_codigo))
-    lcCloudVen = ALLTRIM(TRANSFORM(cur_conex_doc.cnx_dcl_ven_codigo))
+    lcCloudCli = ALLTRIM(TRANSFORM(NVL(cur_conex_doc.cnx_dcl_clt_codigo, "")))
+    lcCloudVen = ALLTRIM(TRANSFORM(NVL(cur_conex_doc.cnx_dcl_ven_codigo, "")))
     
     * Por defecto, el ID del cliente y vendedor asumen ser el de la nube
     lcCidCliente = lcCloudCli
     lcCidVende   = lcCloudVen
-    lnMontoT     = cur_conex_doc.CNX_DCL_NETO
+    lnMontoT     = NVL(cur_conex_doc.CNX_DCL_NETO, 0)
     
     * Validacion de Cliente Local
     SELECT tclientes
@@ -357,9 +357,9 @@ DO WHILE !EOF()
             
             DO WHILE !EOF()
                 LOCAL lcProducto, lnCantidad, lnPrecio, lnMonto
-                lcProducto = ALLTRIM(TRANSFORM(cur_conex_mov.CNX_MCL_UPP_PDT_CODIGO))
-                lnCantidad = cur_conex_mov.CNX_MCL_CANTIDAD
-                lnPrecio   = cur_conex_mov.CNX_MCL_BASE
+                lcProducto = ALLTRIM(TRANSFORM(NVL(cur_conex_mov.CNX_MCL_UPP_PDT_CODIGO, "")))
+                lnCantidad = NVL(cur_conex_mov.CNX_MCL_CANTIDAD, 0)
+                lnPrecio   = NVL(cur_conex_mov.CNX_MCL_BASE, 0)
                 lnMonto    = lnCantidad * lnPrecio
                 
                 INSERT INTO tdetalles_pedido ;

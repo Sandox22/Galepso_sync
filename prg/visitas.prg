@@ -73,32 +73,32 @@ IF lnhandle > 0
 			SELECT tpedidos
 		    append blank
 		    replace cid_pedido with PADL(ALLTRIM(ttvisitas.cid_visi),8)
-		    replace cid_clien with str(val(ttvisitas.cid_clien),5)
+		    replace cid_clien with str(val(NVL(ttvisitas.cid_clien, "0")),5)
 		 	replace dfecha with DATE()            
 		    replace cid_status with "  1"
 		    replace ctipo_pre with " 1"
-		    replace cid_vende with str(val(ttvisitas.cid_vende),5)
-		    replace cnombre_cl with ttvisitas.cnombre_cl
-		    replace crif_cli WITH ttvisitas.crif_cli
+		    replace cid_vende with str(val(NVL(ttvisitas.cid_vende, "0")),5)
+		    replace cnombre_cl with NVL(ttvisitas.cnombre_cl, "")
+		    replace crif_cli WITH NVL(ttvisitas.crif_cli, "")
 		    
 		    SELECT tvisitas_empresa
 			APPEND BLANK
-			replace cid_clien WITH ttvisitas.cid_clien IN tvisitas_empresa
-			replace cid_vende WITH ttvisitas.cid_vende IN tvisitas_empresa
+			replace cid_clien WITH NVL(ttvisitas.cid_clien, "") IN tvisitas_empresa
+			replace cid_vende WITH NVL(ttvisitas.cid_vende, "") IN tvisitas_empresa
 			replace dfecha_v WITH DATE() IN tvisitas_empresa
 			**replace mobservaci WITH ttvisitas.mobservaci IN tvisitas_empresa
 			replace cid_status WITH .t. IN tvisitas_empresa
 			replace cid_usuari WITH "LIDERPLUS" IN tvisitas_empresa
 			replace dfecha_act WITH DATE() IN tvisitas_empresa
-			replace cid_visi WITH ttvisitas.cid_visi IN tvisitas_empresa
+			replace cid_visi WITH NVL(ttvisitas.cid_visi, "") IN tvisitas_empresa
 			replace mlotes WITH "" IN tvisitas_empresa 
-			replace mrecomen WITH ttvisitas.mrecomen IN tvisitas_empresa
+			replace mrecomen WITH NVL(ttvisitas.mrecomen, "") IN tvisitas_empresa
 			SET DATe YMD
-			replace dfecha WITH CTOT(CHRTRAN(ttvisitas.dfecha_v,"-","/")) IN tvisitas_empresa
+			replace dfecha WITH CTOT(CHRTRAN(NVL(ttvisitas.dfecha_v,"-"),"-","/")) IN tvisitas_empresa
 			SET DATE british
 			replace cnombreenv WITH "" IN tvisitas_empresa
-			replace cid_finan WITH ttvisitas.cid_finan IN tvisitas_empresa
-			replace cid_ciclo WITH ttvisitas.cciclo IN tvisitas_empresa
+			replace cid_finan WITH NVL(ttvisitas.cid_finan, "") IN tvisitas_empresa
+			replace cid_ciclo WITH NVL(ttvisitas.cciclo, "") IN tvisitas_empresa
 			replace ctipo_v WITH " 1" IN tvisitas_empresa
 		    
 		    
@@ -111,11 +111,11 @@ IF lnhandle > 0
 			      select tdetalles_pedido
 			      append blank
 			      replace cid_pedido with PADL(ALLTRIM(ttvisitas.cid_visi),8)
-			      replace cid_produc with ttdetalles_visita.cid_produc
-			      replace ncantidad with ttdetalles_visita.ncantidad
-			      replace nprecio with ttdetalles_visita.nprecio
-			      replace nmonto with ttdetalles_visita.nmonto
-			      lnMontoTotal=lnMontoTotal+ttdetalles_visita.nmonto
+			      replace cid_produc with NVL(ttdetalles_visita.cid_produc, "")
+			      replace ncantidad with NVL(ttdetalles_visita.ncantidad, 0)
+			      replace nprecio with NVL(ttdetalles_visita.nprecio, 0)
+			      replace nmonto with NVL(ttdetalles_visita.nmonto, 0)
+			      lnMontoTotal=lnMontoTotal+NVL(ttdetalles_visita.nmonto, 0)
 			      replace cid_almace WITH "P1"
 			     ** replace ndescuento with ttdetalles_pedido.ndescuento
 			      

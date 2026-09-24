@@ -429,3 +429,19 @@ DO precios.prg  WITH lnhandle
 
 > [!NOTE]
 > Este orquestador utiliza credenciales hardcodeadas y es útil para ejecución directa desde el IDE de VFP 9 durante desarrollo. En producción, el flujo normal pasa por `sincronizar.exe` → `config.json`.
+
+---
+
+## 5. Hitos y Registro de Avances
+
+### Hitos Logrados (24 de Septiembre de 2026)
+- **Implementación y certificación del Radar de Ediciones (`CNX_CLT_MODIFICADO`)** en `clientes.prg`.
+- **Sanitización transversal contra valores `.NULL.` (`NVL()`)** en módulos de bajada y subida (`clientes.prg`, `pedidos.prg`, `vendedores.prg`, `visitas.prg`).
+- **Resolución de conflicto de duplicidad** en subida de clientes al cambiar `CNX_CLT_CODIGO` en ADN (búsqueda jerárquica por PK y fallback por `cnx_clt_galexo`).
+- **Ejecución del [SPEC-001]**: erradicación de `MESSAGEBOX` en `productos.prg`, `precios.prg`, `estados.prg` y `municipios.prg` garantizando cumplimiento 100% Headless `SYS(2335, 0)`.
+- **Aislamiento de deuda técnica**: Archivo legacy `cxc.prg` movido a `prg/_legacy/`.
+
+### Punto de Partida (Próxima Sesión)
+- Recompilación del binario `dist\sincronizar.exe`.
+- Pruebas E2E completas desde la interfaz UI en Python.
+- Evaluación de refactorización para los módulos legacy restantes: `visitas.prg`, `recibos.prg` y `devoluciones.prg`.

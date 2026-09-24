@@ -4,7 +4,9 @@
 
 LPARAMETERS tnH
 IF TYPE("tnH") <> "N" OR tnH <= 0
-    MESSAGEBOX("Se requiere un handle de conexión ODBC válido para sincronizar estados.", 16, "Error")
+    IF TYPE("PCESTADOENVIA") = "C"
+        PCESTADOENVIA = PCESTADOENVIA + "[Estados] ERROR: Handle ODBC invalido." + CHR(13)
+    ENDIF
     RETURN .F.
 ENDIF
 

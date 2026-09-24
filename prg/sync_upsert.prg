@@ -101,6 +101,18 @@ FUNCTION SyncUpsert
     SET FILTER TO .NOT. DELETED()
     GO TOP
 
+    * --- INYECCIÓN DE TELEMETRÍA: RADAR INTERNO DEL MOTOR ---
+    LOCAL lnFilteredCount
+    COUNT TO lnFilteredCount
+    GO TOP
+    IF TYPE("PCESTADOENVIA") = "C"
+        PCESTADOENVIA = PCESTADOENVIA + "[SyncUpsert] RADAR MOTOR: " + TRANSFORM(lnFilteredCount) + " registros activos (no eliminados) en " + tcLocalAlias + " para " + tcRemoteTable + CHR(13)
+    ENDIF
+    LOCAL lcEngineRadarMsg
+    lcEngineRadarMsg = TTOC(DATETIME()) + " [SyncUpsert] RADAR MOTOR (" + tcRemoteTable + "): " + TRANSFORM(lnFilteredCount) + " registros listos para procesar." + CHR(13) + CHR(10)
+    STRTOFILE(lcEngineRadarMsg, "C:\GalepsoSync\telemetria_syncupsert.log", 1)
+    * --------------------------------------------------------
+
     SCAN
         lcVals = ""
 
@@ -153,12 +165,22 @@ FUNCTION SyncUpsert
         IF lnRet < 0
             =AERROR(laErr)
             lnFail = lnFail + 1
+            
+            * --- INYECCIÓN DE TELEMETRÍA: RECHAZO MARIADB AGRESIVO ---
+            LOCAL lcErrorLogMsg
+            lcErrorLogMsg = TTOC(DATETIME()) + " [SyncUpsert] RECHAZO MARIADB en " + tcRemoteTable + CHR(13) + CHR(10) + ;
+                            "  - SQL: " + lcSQL + CHR(13) + CHR(10) + ;
+                            "  - ERROR NATIVO: " + ALLTRIM(TRANSFORM(laErr(1))) + " | " + ALLTRIM(TRANSFORM(laErr(2))) + CHR(13) + CHR(10) + ;
+                            "--------------------------------------------------" + CHR(13) + CHR(10)
+            STRTOFILE(lcErrorLogMsg, "C:\GalepsoSync\telemetria_syncupsert.log", 1)
+            * ---------------------------------------------------------
+
             * Registrar en PCESTADOENVIA si está disponible en scope
             IF TYPE("PCESTADOENVIA") = "C"
                 PCESTADOENVIA = PCESTADOENVIA + CHR(13) + ;
                     "[SyncUpsert] ERROR en " + tcRemoteTable + ;
                     " | Registro: " + lcVals + CHR(13) + ;
-                    ALLTRIM(laErr(2)) + " " + TTOC(DATETIME())
+                    ALLTRIM(TRANSFORM(laErr(2))) + " " + TTOC(DATETIME())
             ENDIF
         ELSE
             lnOK = lnOK + 1

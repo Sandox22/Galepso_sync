@@ -1,5 +1,6 @@
 * sincronizar.prg
-* Motor de Sincronizacion de Vendedores y Clientes (VFP -> MariaDB)
+* Orquestador Maestro de Sincronizacion VFP -> MariaDB
+* Arquitectura Modular - Fase 2 (Headless)
 
 * --- CONFIGURACION DE MODO SIGILOSO (HEADLESS) ---
 _SCREEN.Visible = .F.
@@ -12,20 +13,36 @@ SET NOTIFY CURSOR OFF
 SET EXCLUSIVE OFF
 SET CPDIALOG OFF
 SET REPROCESS TO AUTOMATIC
+SET DELETED ON
+SET EXACT ON
+SET MULTILOCKS ON
 
 ON ERROR DO ManejadorErrores WITH ERROR(), MESSAGE(), MESSAGE(1), PROGRAM(), LINENO()
 * -------------------------------------------------
 
+* Variables Globales Oficiales (Requeridas por los modulos)
+PUBLIC dirdata, PCESTADOENVIA, contarecibe, contaenviar, PCESTADORECIBE
+dirdata = "X:\Galepso\Data\Emp6\"
+PCESTADOENVIA = ""
+PCESTADORECIBE = ""
+contaenviar = 0
+contarecibe = 0
+
+* Limpieza de transacciones huerfanas
+DO WHILE TXNLEVEL() > 0
+    ROLLBACK
+ENDDO
+
 LOCAL lcJsonPath, lcJsonStr, loScript
-LOCAL lcServer, lcPort, lcUser, lcPass, lcDB, lcDirData
-LOCAL llSyncVend, llSyncCli, llSyncPed
+LOCAL lcServer, lcPort, lcUser, lcPass, lcDB
+LOCAL llSyncVend, llSyncCli, llSyncPed, llSyncCat, llSyncCxC
 LOCAL lcConnStr, lnConn
 LOCAL lcLogFile, lcErrorFile
 
 lcLogFile = "sync_log.txt"
 lcErrorFile = "error_sync.txt"
 
-DO EscribirLog WITH "Iniciando", lcLogFile
+DO EscribirLog WITH "Iniciando Orquestador Maestro", lcLogFile
 
 * 1. LECTURA Y SANITIZACIÓN DEL JSON
 lcJsonPath = "config.json"
@@ -52,27 +69,33 @@ llErrorParseo = .F.
 TRY
     loScript = CREATEOBJECT("MSScriptControl.ScriptControl")
     loScript.Language = "JScript"
-    * Se envuelve en paréntesis para evaluar como expresión de objeto pura
     loScript.ExecuteStatement("var config = (" + lcJsonStr + ");")
     
-    * Extracción de credenciales (Asegúrate de usar los nombres exactos que genera Python)
+    * Credenciales
     lcServer   = loScript.Eval("config.database.server")
     lcPort     = loScript.Eval("config.database.port")
     lcUser     = loScript.Eval("config.database.user")
     lcPass     = loScript.Eval("config.database.password")
     lcDB       = loScript.Eval("config.database.database")
     
-    LOCAL lcSyncVendStr, lcSyncCliStr
+    * Banderas
+    LOCAL lcStr
     
-    lcSyncVendStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.vendedores"))))
-    llSyncVend = INLIST(lcSyncVendStr, ".T.", "TRUE", "1")
+    lcStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.vendedores"))))
+    llSyncVend = INLIST(lcStr, ".T.", "TRUE", "1")
 
-    lcSyncCliStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.clientes"))))
-    llSyncCli = INLIST(lcSyncCliStr, ".T.", "TRUE", "1")
+    lcStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.clientes"))))
+    llSyncCli = INLIST(lcStr, ".T.", "TRUE", "1")
     
-    LOCAL lcSyncPedStr
-    lcSyncPedStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.pedidos"))))
-    llSyncPed = INLIST(lcSyncPedStr, ".T.", "TRUE", "1")
+    * Catálogos (usando productos en config.json)
+    lcStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.productos"))))
+    llSyncCat = INLIST(lcStr, ".T.", "TRUE", "1")
+
+    lcStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.pedidos"))))
+    llSyncPed = INLIST(lcStr, ".T.", "TRUE", "1")
+    
+    lcStr = UPPER(ALLTRIM(TRANSFORM(loScript.Eval("config.modules.cxc"))))
+    llSyncCxC = INLIST(lcStr, ".T.", "TRUE", "1")
 
 CATCH TO loErr
     LOCAL lcDetalleError
@@ -85,12 +108,8 @@ IF llErrorParseo
     QUIT
 ENDIF
 
-* Requerimiento explícito: Ruta de los DBF hardcodeada a X:\Galepso\Data\Emp6\
-lcDirData = "X:\Galepso\Data\Emp6\"
-
-* Regla OBLIGATORIA (GEMINI.md): SQLSETPROP(0, "DispLogin", 3) antes de SQLSTRINGCONNECT()
+* 2. CONEXIÓN ODBC
 SQLSETPROP(0, "DispLogin", 3)
-
 lcConnStr = "DRIVER={MySQL ODBC 3.51 Driver};SERVER=" + TRANSFORM(lcServer) + ;
             ";PORT=" + TRANSFORM(lcPort) + ";DATABASE=" + TRANSFORM(lcDB) + ;
             ";UID=" + TRANSFORM(lcUser) + ";PWD=" + TRANSFORM(lcPass) + ";OPTION=3;"
@@ -100,118 +119,62 @@ lnConn = SQLSTRINGCONNECT(lcConnStr)
 IF lnConn <= 0
     LOCAL ARRAY laErr[1]
     AERROR(laErr)
-    DO EscribirLog WITH "ERROR Conexion: " + TRANSFORM(laErr[2]), lcErrorFile
+    DO EscribirLog WITH "ERROR Conexion ODBC: " + TRANSFORM(laErr[2]), lcErrorFile
     QUIT
 ENDIF
 
-DO EscribirLog WITH "Conexion exitosa", lcLogFile
+DO EscribirLog WITH "Conexion ODBC Exitosa.", lcLogFile
 
+* Asegurar que el helper de SyncUpsert este cargado para los catalogos
+SET PROCEDURE TO prg\sync_upsert.prg ADDITIVE
+
+* 3. FLUJO DE ORQUESTACIÓN Y RUTEO MODULAR
+* Orden estricto para garantizar dependencias FK
+
+* 3.1 Vendedores
 IF llSyncVend
-    DO EscribirLog WITH "Sincronizando Vendedores...", lcLogFile
-    DO SyncVendedores WITH lnConn, lcDirData, lcErrorFile
+    DO EscribirLog WITH "Iniciando subida de Vendedores...", lcLogFile
+    DO prg\vendedores.prg WITH lnConn
 ENDIF
 
+* 3.2 Clientes
 IF llSyncCli
-    DO EscribirLog WITH "Sincronizando Clientes...", lcLogFile
-    DO SyncClientes WITH lnConn, lcDirData, lcErrorFile
+    DO EscribirLog WITH "Iniciando sincronizacion bidireccional de Clientes...", lcLogFile
+    DO prg\clientes.prg WITH lnConn
 ENDIF
 
+* 3.3 Catálogos (Subida via SyncUpsert)
+IF llSyncCat
+    DO EscribirLog WITH "Iniciando subida de Catalogos (Productos, Precios, Estados, Municipios)...", lcLogFile
+    DO prg\estados.prg WITH lnConn
+    DO prg\municipios.prg WITH lnConn
+    DO prg\productos.prg WITH lnConn
+    DO prg\precios.prg WITH lnConn
+ENDIF
+
+* 3.4 Pedidos (Bajada transaccional)
 IF llSyncPed
-    DO EscribirLog WITH "Sincronizando Pedidos (Bajada)...", lcLogFile
+    DO EscribirLog WITH "Iniciando bajada transaccional de Pedidos...", lcLogFile
     DO prg\pedidos.prg WITH lnConn
 ENDIF
 
+* 3.5 CxC (Subida de llave compuesta y JSON)
+IF llSyncCxC
+    DO EscribirLog WITH "Iniciando subida transaccional de Cuentas por Cobrar (CxC)...", lcLogFile
+    DO prg\cxc_sincro_subida.prg WITH lnConn
+ENDIF
+
+* 4. CIERRE SEGURO
 SQLDISCONNECT(lnConn)
-DO EscribirLog WITH "Finalizado", lcLogFile
+
+LOCAL lcResumenFinal
+lcResumenFinal = "Ejecucion Finalizada." + CHR(13) + CHR(10) + ;
+                 "LOG ENVIO:" + CHR(13) + CHR(10) + PCESTADOENVIA + CHR(13) + CHR(10) + ;
+                 "LOG RECIBO:" + CHR(13) + CHR(10) + PCESTADORECIBE
+                 
+DO EscribirLog WITH lcResumenFinal, lcLogFile
 
 QUIT
-
-*---------------------------------------------------------
-PROCEDURE SyncVendedores
-LPARAMETERS tnConn, tcDirData, tcErrorFile
-LOCAL lcTabla, lcSQL, lnRet, lcCod, lcNom, lcVenCedula
-
-lcTabla = tcDirData + "tvendedores.dbf"
-IF FILE(lcTabla)
-    * Apertura defensiva de tablas según Reglas
-    IF !USED("vendedores")
-        USE (lcTabla) SHARED IN 0 ALIAS vendedores
-    ENDIF
-
-    SELECT vendedores
-    EscribirLog("Iniciando envío de Vendedores. Registros locales: " + TRANSFORM(RECCOUNT()), "sync_log.txt")
-    GO TOP
-    SCAN
-        * Análisis validado contra el esquema:
-        * cid_vende (PK), cnombrev, ccedula / crif
-        lcCod = PADL(ALLTRIM(TRANSFORM(cid_vende)), 5, '0')
-        * Escapar comillas simples con STRTRAN
-        lcNom = STRTRAN(ALLTRIM(TRANSFORM(cnombrev)), "'", "\'")
-        
-        lcVenCedula = ALLTRIM(TRANSFORM(crif_ven))
-        
-        lcSQL = "REPLACE INTO conex_vendedores (CNX_VEN_CODIGO, CNX_VEN_NOMBRE, CNX_VEN_CEDULA) VALUES (" + ;
-                "'" + lcCod + "', '" + lcNom + "', '" + lcVenCedula + "')"
-                
-        lnRet = SQLEXEC(tnConn, lcSQL)
-        IF lnRet < 0
-            LOCAL ARRAY laErr[1]
-            AERROR(laErr)
-            EscribirLog("Fallo SQL: " + TRANSFORM(laErr[2]) + " | Comando: " + lcSQL, "error_sync.txt")
-        ENDIF
-    ENDSCAN
-    SQLEXEC(tnConn, "COMMIT")
-
-    IF USED("vendedores")
-        USE IN vendedores
-    ENDIF
-ELSE
-    DO EscribirLog WITH "ADVERTENCIA: No se encontro tvendedores.dbf en " + tcDirData, tcErrorFile
-ENDIF
-ENDPROC
-
-*---------------------------------------------------------
-PROCEDURE SyncClientes
-LPARAMETERS tnConn, tcDirData, tcErrorFile
-LOCAL lcTabla, lcSQL, lnRet, lcCod, lcNom, lcVen
-
-lcTabla = tcDirData + "tclientes.dbf"
-IF FILE(lcTabla)
-    * Apertura defensiva de tablas
-    IF !USED("clientes")
-        USE (lcTabla) SHARED IN 0 ALIAS clientes
-    ENDIF
-
-    SELECT clientes
-    EscribirLog("Iniciando envío de Clientes. Registros locales: " + TRANSFORM(RECCOUNT()), "sync_log.txt")
-    GO TOP
-    SCAN
-        * Análisis validado de tclientes:
-        * cid_clien (PK), cnombre_cl, cid_vende (FK Vendedor)
-        lcCod = PADL(ALLTRIM(TRANSFORM(cid_clien)), 5, '0')
-        lcNom = STRTRAN(ALLTRIM(TRANSFORM(cnombre_cl)), "'", "\'")
-        lcVen = PADL(ALLTRIM(TRANSFORM(cid_vende)), 5, '0')
-        
-        * Usando los nombres remotos oficiales del diccionario de datos (galepso-data-dictionary)
-        lcSQL = "REPLACE INTO conex_clientes (CNX_CLT_CODIGO, cnx_clt_galexo, CNX_CLT_NOMBRE, CNX_CLT_VEN_CODIGO) VALUES (" + ;
-                "'" + lcCod + "', '" + lcCod + "', '" + lcNom + "', '" + lcVen + "')"
-                
-        lnRet = SQLEXEC(tnConn, lcSQL)
-        IF lnRet < 0
-            LOCAL ARRAY laErr[1]
-            AERROR(laErr)
-            EscribirLog("Fallo SQL: " + TRANSFORM(laErr[2]) + " | Comando: " + lcSQL, "error_sync.txt")
-        ENDIF
-    ENDSCAN
-    SQLEXEC(tnConn, "COMMIT")
-
-    IF USED("clientes")
-        USE IN clientes
-    ENDIF
-ELSE
-    DO EscribirLog WITH "ADVERTENCIA: No se encontro tclientes.dbf en " + tcDirData, tcErrorFile
-ENDIF
-ENDPROC
 
 *---------------------------------------------------------
 PROCEDURE EscribirLog
