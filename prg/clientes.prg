@@ -93,6 +93,11 @@ IF lnResBajada > 0 AND RECCOUNT("curNubeBajada") > 0
         * Forzar CNX_CLT_MODIFICADO = 0 para evitar que el trigger de BD active el Radar en el próximo ciclo
         LOCAL lnResUpdateNube
         lnResUpdateNube = SQLEXEC(tnH, "UPDATE conex_clientes SET cnx_clt_galexo = ?lcNewCid, cnx_clt_check = 1, CNX_CLT_MODIFICADO = 0 WHERE cnx_clt_codigo = ?curNubeBajada.cnx_clt_codigo")
+        
+        * Two-Step Reset: Neutralizar el trigger en caso de que se haya activado
+        IF lnResUpdateNube > 0
+            SQLEXEC(tnH, "UPDATE conex_clientes SET CNX_CLT_MODIFICADO = 0 WHERE cnx_clt_codigo = ?curNubeBajada.cnx_clt_codigo")
+        ENDIF
     ENDSCAN
 ENDIF
 
@@ -422,6 +427,9 @@ IF RECCOUNT("curSubidaLocal") > 0
                                
                 lnResExecute = SQLEXEC(tnH, lcSqlExecute)
                 IF lnResExecute > 0
+                    * Two-Step Reset: Neutralizar el trigger de MariaDB que impone el flag en 1
+                    SQLEXEC(tnH, "UPDATE conex_clientes SET CNX_CLT_MODIFICADO = 0 WHERE cnx_clt_codigo = ?lcCloudPK")
+
                     lnActualizados = lnActualizados + 1
                     STRTOFILE("      -> [OK SUBIDA] UPDATE exitoso en MariaDB." + CHR(13)+CHR(10), lcLogRadar, 1)
                     
@@ -446,6 +454,9 @@ IF RECCOUNT("curSubidaLocal") > 0
                            
             lnResExecute = SQLEXEC(tnH, lcSqlExecute)
             IF lnResExecute > 0
+                * Two-Step Reset: Neutralizar el trigger de MariaDB que impone el flag en 1
+                SQLEXEC(tnH, "UPDATE conex_clientes SET CNX_CLT_MODIFICADO = 0 WHERE cnx_clt_codigo = ?lcCloudPK")
+
                 lnInsertados = lnInsertados + 1
                 STRTOFILE("      -> [OK SUBIDA] INSERT exitoso en MariaDB. Galexo: [" + lcCidClien + "]" + CHR(13)+CHR(10), lcLogRadar, 1)
                 UPDATE tclientes SET cnit_cli = lcCloudPK WHERE cid_clien = curSubidaLocal.cid_clien
