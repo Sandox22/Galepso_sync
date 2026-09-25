@@ -90,8 +90,9 @@ IF lnResBajada > 0 AND RECCOUNT("curNubeBajada") > 0
                     lcNubeCodigo)
 
         * Marcar en la nube como sincronizado devolviendo el nuevo ID local (galexo)
+        * Forzar CNX_CLT_MODIFICADO = 0 para evitar que el trigger de BD active el Radar en el próximo ciclo
         LOCAL lnResUpdateNube
-        lnResUpdateNube = SQLEXEC(tnH, "UPDATE conex_clientes SET cnx_clt_galexo = ?lcNewCid, cnx_clt_check = 1 WHERE cnx_clt_codigo = ?curNubeBajada.cnx_clt_codigo")
+        lnResUpdateNube = SQLEXEC(tnH, "UPDATE conex_clientes SET cnx_clt_galexo = ?lcNewCid, cnx_clt_check = 1, CNX_CLT_MODIFICADO = 0 WHERE cnx_clt_codigo = ?curNubeBajada.cnx_clt_codigo")
     ENDSCAN
 ENDIF
 
@@ -300,7 +301,7 @@ ENDIF
 * Obtener snapshot de la nube para evitar N+1 queries y actualizaciones redundantes
 LOCAL lnResSnapshot
 lnResSnapshot = SQLEXEC(tnH, ;
-    "SELECT cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo, cnx_clt_direccion1, cnx_clt_telefono1, cnx_clt_ven_codigo FROM conex_clientes", ;
+    "SELECT cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo, cnx_clt_mpo_codigo, cnx_clt_direccion1, cnx_clt_telefono1, cnx_clt_ven_codigo FROM conex_clientes", ;
     "curCloudSnapshot")
 
 IF lnResSnapshot < 0
@@ -323,6 +324,7 @@ SELECT VAL(cid_clien) AS cnx_clt_galexo_val, ;
        cnombre_cl AS cnx_clt_nombre, ;
        crif_cli AS cnx_clt_rif, ;
        cid_estadc AS cnx_clt_edo_codigo, ;
+       cid_ciudac AS cnx_clt_mpo_codigo, ;
        cdir_cli1, ;
        ctele_cli, ;
        cid_vende, ;
@@ -342,7 +344,7 @@ lnInsertados = 0
 IF RECCOUNT("curSubidaLocal") > 0
     SELECT curSubidaLocal
     SCAN
-        LOCAL lcNombre, lcRif, lnEdoCodigo, lcCidClien, lcDir1, lcTel1, lcVenCod
+        LOCAL lcNombre, lcRif, lnEdoCodigo, lnMpoCodigo, lcCidClien, lcDir1, lcTel1, lcVenCod
         
         * Sanitización estricta del código
         lcCidClien  = ALLTRIM(STRTRAN(curSubidaLocal.cid_clien, " ", ""))
@@ -351,6 +353,7 @@ IF RECCOUNT("curSubidaLocal") > 0
         lcNombre    = STRTRAN(ALLTRIM(NVL(curSubidaLocal.cnx_clt_nombre, "")), "'", "")
         lcRif       = ALLTRIM(NVL(curSubidaLocal.cnx_clt_rif, ""))
         lnEdoCodigo = VAL(NVL(curSubidaLocal.cnx_clt_edo_codigo, "0"))
+        lnMpoCodigo = VAL(NVL(curSubidaLocal.cnx_clt_mpo_codigo, "0"))
         lcDir1      = STRTRAN(ALLTRIM(NVL(curSubidaLocal.cdir_cli1, "")), "'", "")
         lcTel1      = STRTRAN(ALLTRIM(NVL(curSubidaLocal.ctele_cli, "")), "'", "")
         lcVenCod    = ALLTRIM(STRTRAN(NVL(curSubidaLocal.cid_vende, ""), " ", ""))
@@ -389,6 +392,7 @@ IF RECCOUNT("curSubidaLocal") > 0
             IF ALLTRIM(NVL(curCloudSnapshot.cnx_clt_nombre, "")) <> lcNombre OR ;
                ALLTRIM(NVL(curCloudSnapshot.cnx_clt_rif, "")) <> lcRif OR ;
                VAL(TRANSFORM(NVL(curCloudSnapshot.cnx_clt_edo_codigo, 0))) <> lnEdoCodigo OR ;
+               VAL(TRANSFORM(NVL(curCloudSnapshot.cnx_clt_mpo_codigo, 0))) <> lnMpoCodigo OR ;
                ALLTRIM(NVL(curCloudSnapshot.cnx_clt_direccion1, "")) <> lcDir1 OR ;
                ALLTRIM(NVL(curCloudSnapshot.cnx_clt_telefono1, "")) <> lcTel1 OR ;
                ALLTRIM(NVL(curCloudSnapshot.cnx_clt_ven_codigo, "")) <> lcVenCod OR ;
@@ -398,28 +402,37 @@ IF RECCOUNT("curSubidaLocal") > 0
             ENDIF
 
             IF llNeedsUpdate
+                * Telemetría: Registro de diferencia detectada Local -> Nube
+                STRTOFILE("    > [SUBIDA] Diferencia detectada Local->Nube. Galexo: [" + lcCidClien + "] - Nube PK: [" + lcCloudPK + "]" + CHR(13)+CHR(10), lcLogRadar, 1)
+
                 * 3. Flujo UPDATE (Si existe y hubo cambios locales): Actualiza el registro
                 * NO sobreescribimos cnx_clt_codigo para respetar cambios en ADN
-                * NO sobreescribimos CNX_CLT_MODIFICADO para no afectar semáforos
+                * SI forzamos CNX_CLT_MODIFICADO = 0 para evitar efecto boomerang por triggers
                 lcSqlExecute = "UPDATE conex_clientes SET " + ;
                                "cnx_clt_galexo = ?lcCidClien, " + ;
                                "cnx_clt_nombre = ?lcNombre, " + ;
                                "cnx_clt_rif = ?lcRif, " + ;
                                "cnx_clt_edo_codigo = ?lnEdoCodigo, " + ;
+                               "cnx_clt_mpo_codigo = ?lnMpoCodigo, " + ;
                                "cnx_clt_direccion1 = ?lcDir1, " + ;
                                "cnx_clt_telefono1 = ?lcTel1, " + ;
-                               "cnx_clt_ven_codigo = ?lcVenCod " + ;
+                               "cnx_clt_ven_codigo = ?lcVenCod, " + ;
+                               "CNX_CLT_MODIFICADO = 0 " + ;
                                "WHERE cnx_clt_codigo = ?lcCloudPK"
                                
                 lnResExecute = SQLEXEC(tnH, lcSqlExecute)
                 IF lnResExecute > 0
                     lnActualizados = lnActualizados + 1
+                    STRTOFILE("      -> [OK SUBIDA] UPDATE exitoso en MariaDB." + CHR(13)+CHR(10), lcLogRadar, 1)
+                    
                     IF ALLTRIM(curSubidaLocal.cnit_cli) <> lcCloudPK
                         UPDATE tclientes SET cnit_cli = lcCloudPK WHERE cid_clien = curSubidaLocal.cid_clien
                     ENDIF
                 ELSE
                     LOCAL ARRAY laErrorU[1]
                     AERROR(laErrorU)
+                    STRTOFILE("      -> [ERROR SUBIDA] Fallo UPDATE: " + ALLTRIM(TRANSFORM(laErrorU[2])) + CHR(13)+CHR(10), lcLogRadar, 1)
+                    
                     IF TYPE("PCESTADOENVIA") = "C"
                         PCESTADOENVIA = PCESTADOENVIA + " | ERROR SQL NUBE (UPDATE): " + TRANSFORM(laErrorU[2])
                     ENDIF
@@ -428,16 +441,18 @@ IF RECCOUNT("curSubidaLocal") > 0
         ELSE
             * 4. Flujo INSERT (Si no existe): Inserción nativa
             lcCloudPK = lcCidClien
-            lcSqlExecute = "INSERT INTO conex_clientes (cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo, cnx_clt_direccion1, cnx_clt_telefono1, cnx_clt_ven_codigo) " + ;
-                           "VALUES (?lcCloudPK, ?lcCidClien, ?lcNombre, ?lcRif, ?lnEdoCodigo, ?lcDir1, ?lcTel1, ?lcVenCod)"
+            lcSqlExecute = "INSERT INTO conex_clientes (cnx_clt_codigo, cnx_clt_galexo, cnx_clt_nombre, cnx_clt_rif, cnx_clt_edo_codigo, cnx_clt_mpo_codigo, cnx_clt_direccion1, cnx_clt_telefono1, cnx_clt_ven_codigo, CNX_CLT_MODIFICADO) " + ;
+                           "VALUES (?lcCloudPK, ?lcCidClien, ?lcNombre, ?lcRif, ?lnEdoCodigo, ?lnMpoCodigo, ?lcDir1, ?lcTel1, ?lcVenCod, 0)"
                            
             lnResExecute = SQLEXEC(tnH, lcSqlExecute)
             IF lnResExecute > 0
                 lnInsertados = lnInsertados + 1
+                STRTOFILE("      -> [OK SUBIDA] INSERT exitoso en MariaDB. Galexo: [" + lcCidClien + "]" + CHR(13)+CHR(10), lcLogRadar, 1)
                 UPDATE tclientes SET cnit_cli = lcCloudPK WHERE cid_clien = curSubidaLocal.cid_clien
             ELSE
                 LOCAL ARRAY laErrorI[1]
                 AERROR(laErrorI)
+                STRTOFILE("      -> [ERROR SUBIDA] Fallo INSERT: " + ALLTRIM(TRANSFORM(laErrorI[2])) + CHR(13)+CHR(10), lcLogRadar, 1)
                 IF TYPE("PCESTADOENVIA") = "C"
                     PCESTADOENVIA = PCESTADOENVIA + " | ERROR SQL NUBE (INSERT): " + TRANSFORM(laErrorI[2])
                 ENDIF
