@@ -183,72 +183,15 @@ DO WHILE !EOF()
         * Si existe, tomamos su ID local real para armar el pedido
         lcCidCliente = tclientes.cid_clien
     ELSE
-        LOCAL lcSqlCli, lnRetCli
-        TEXT TO lcSqlCli NOSHOW TEXTMERGE
-            SELECT * FROM conex_clientes WHERE CNX_CLT_CODIGO = '<<lcCloudCli>>'
-        ENDTEXT
-        lnRetCli = SQLEXEC(tnH, lcSqlCli, "cur_clt_nube")
-        
-        IF lnRetCli > 0 AND USED("cur_clt_nube") AND RECCOUNT("cur_clt_nube") > 0
-            SELECT cur_clt_nube
-            
-            * Comprobar si existe mapeo de Galepso ID en la nube
-            LOCAL lcGalexoID
-            lcGalexoID = ALLTRIM(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_GALEXO, "")))
-            IF !EMPTY(lcGalexoID) AND lcGalexoID <> "0"
-                lcCidCliente = PADL(lcGalexoID, 5, '0')
-            ELSE
-                * 1. Autogeneracion Segura: Calcular proximo correlativo local (5 caracteres)
-                LOCAL lnMaxCli
-                SELECT MAX(VAL(cid_clien)) AS max_id FROM tclientes INTO CURSOR cur_max_cli
-                lnMaxCli = NVL(cur_max_cli.max_id, 0)
-                USE IN cur_max_cli
-                lcCidCliente = PADL(ALLTRIM(STR(lnMaxCli + 1)), 5, '0')
-            ENDIF
-            
-            * Extraccion segura a variables locales
-            LOCAL lcNom, lcRif, lcDir, lcTele, lcVen, lnEdo, lnMpo
-            lcNom  = LEFT(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_NOMBRE, "")), 100)
-            lcRif  = LEFT(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_RIF, "")), 12)
-            lcDir  = LEFT(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_DIRECCION1, "")), 60)
-            lcTele = LEFT(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_TELEFONO1, "")), 25)
-            lcVen  = STR(VAL(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_VEN_CODIGO, "0"))), 5)
-            lnEdo  = STR(VAL(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_EDO_CODIGO, "0"))), 2)
-            lnMpo  = STR(VAL(TRANSFORM(NVL(cur_clt_nube.CNX_CLT_MPO_CODIGO, "0"))), 2)
-            
-            USE IN cur_clt_nube
-            
-            * Insertar con TRY...CATCH para evitar fallos silenciosos por esquemas
-            TRY
-                SELECT tclientes
-                * 2. Mapeo Cruzado: Usamos correlativo local y guardamos el ID nube en cnit_cli
-                INSERT INTO tclientes ;
-                    (cid_clien, cnit_cli, cnombre_cl, crif_cli, cdir_cli1, ctele_cli, cid_vende, cid_estadc, cid_ciudac, lactivo) ;
-                    VALUES ;
-                    (lcCidCliente, lcCloudCli, lcNom, lcRif, lcDir, lcTele, lcVen, lnEdo, lnMpo, .T.)
-                STRTOFILE(DTOC(DATE()) + " " + TIME() + " - [Rescate] Cliente insertado: " + lcCidCliente + " (Nube: " + lcCloudCli + ")" + CHR(13) + CHR(10), lcDirData + "sync_log.txt", 1)
-            CATCH TO oErrCli
-                LOCAL lcErrInsCli
-                lcErrInsCli = DTOC(DATE()) + " " + TIME() + " - [Pedido " + lcNumeroNube + "] ERROR Insertando Cliente " + lcCidCliente + ": " + oErrCli.Message + CHR(13) + CHR(10)
-                STRTOFILE(lcErrInsCli, lcDirData + "error_sync.txt", 1)
-                llError = .T.
-            ENDTRY
-                
-            SELECT cur_conex_doc
-        ELSE
-            LOCAL lcErrCli
-            lcErrCli = DTOC(DATE()) + " " + TIME() + " - [Pedido " + lcNumeroNube + "] Omitido: El cliente nube " + lcCloudCli + " no existe ni local ni en la nube." + CHR(13) + CHR(10)
-            STRTOFILE(lcErrCli, lcDirData + "error_sync.txt", 1)
-            IF TYPE("PCESTADORECIBE") = "C"
-                PCESTADORECIBE = PCESTADORECIBE + lcErrCli
-            ENDIF
-            IF USED("cur_clt_nube")
-                USE IN cur_clt_nube
-            ENDIF
-            SELECT cur_conex_doc
-            SKIP
-            LOOP
+        LOCAL lcErrCli
+        lcErrCli = DTOC(DATE()) + " " + TIME() + " - [Pedido " + lcNumeroNube + "] Omitido: El cliente nube " + lcCloudCli + " no existe localmente." + CHR(13) + CHR(10)
+        STRTOFILE(lcErrCli, lcDirData + "error_sync.txt", 1)
+        IF TYPE("PCESTADORECIBE") = "C"
+            PCESTADORECIBE = PCESTADORECIBE + lcErrCli
         ENDIF
+        SELECT cur_conex_doc
+        SKIP
+        LOOP
     ENDIF
     
     * Validacion de Vendedor Local
@@ -262,65 +205,15 @@ DO WHILE !EOF()
     IF FOUND()
         lcCidVende = tvendedores.cid_vende
     ELSE
-        LOCAL lcSqlVen, lnRetVen
-        TEXT TO lcSqlVen NOSHOW TEXTMERGE
-            SELECT * FROM conex_vendedores WHERE CNX_VEN_CODIGO = '<<lcCloudVen>>'
-        ENDTEXT
-        lnRetVen = SQLEXEC(tnH, lcSqlVen, "cur_ven_nube")
-        
-        IF lnRetVen > 0 AND USED("cur_ven_nube") AND RECCOUNT("cur_ven_nube") > 0
-            SELECT cur_ven_nube
-            
-            * Comprobar si existe mapeo de Galepso ID en la nube
-            LOCAL lcGalexoVen
-            lcGalexoVen = ALLTRIM(TRANSFORM(NVL(cur_ven_nube.CNX_VEN_GALEXO, "")))
-            IF !EMPTY(lcGalexoVen) AND lcGalexoVen <> "0"
-                lcCidVende = PADL(lcGalexoVen, 5, '0')
-            ELSE
-                * 1. Autogeneracion Segura: Calcular proximo correlativo local (5 caracteres)
-                LOCAL lnMaxVen
-                SELECT MAX(VAL(cid_vende)) AS max_id FROM tvendedores INTO CURSOR cur_max_ven
-                lnMaxVen = NVL(cur_max_ven.max_id, 0)
-                USE IN cur_max_ven
-                lcCidVende = PADL(ALLTRIM(STR(lnMaxVen + 1)), 5, '0')
-            ENDIF
-            
-            * Extraccion segura a variables locales
-            LOCAL lcNomVen
-            lcNomVen = LEFT(TRANSFORM(NVL(cur_ven_nube.CNX_VEN_NOMBRE, "")), 40)
-            
-            USE IN cur_ven_nube
-            
-            TRY
-                SELECT tvendedores
-                * En tvendedores no nos pidieron mapeo cruzado (cnit_vende), pero aseguramos el ID a 5 digitos
-                INSERT INTO tvendedores ;
-                    (cid_vende, cnombrev, ctipo_v, lactivo) ;
-                    VALUES ;
-                    (lcCidVende, lcNomVen, "2", .T.)
-                STRTOFILE(DTOC(DATE()) + " " + TIME() + " - [Rescate] Vendedor insertado: " + lcCidVende + " (Nube: " + lcCloudVen + ")" + CHR(13) + CHR(10), lcDirData + "sync_log.txt", 1)
-            CATCH TO oErrVen
-                LOCAL lcErrInsVen
-                lcErrInsVen = DTOC(DATE()) + " " + TIME() + " - [Pedido " + lcNumeroNube + "] ERROR Insertando Vendedor " + lcCidVende + ": " + oErrVen.Message + CHR(13) + CHR(10)
-                STRTOFILE(lcErrInsVen, lcDirData + "error_sync.txt", 1)
-                llError = .T.
-            ENDTRY
-                
-            SELECT cur_conex_doc
-        ELSE
-            LOCAL lcErrVen
-            lcErrVen = DTOC(DATE()) + " " + TIME() + " - [Pedido " + lcNumeroNube + "] Omitido: El vendedor nube " + lcCloudVen + " no existe ni local ni en la nube." + CHR(13) + CHR(10)
-            STRTOFILE(lcErrVen, lcDirData + "error_sync.txt", 1)
-            IF TYPE("PCESTADORECIBE") = "C"
-                PCESTADORECIBE = PCESTADORECIBE + lcErrVen
-            ENDIF
-            IF USED("cur_ven_nube")
-                USE IN cur_ven_nube
-            ENDIF
-            SELECT cur_conex_doc
-            SKIP
-            LOOP
+        LOCAL lcErrVen
+        lcErrVen = DTOC(DATE()) + " " + TIME() + " - [Pedido " + lcNumeroNube + "] Omitido: El vendedor nube " + lcCloudVen + " no existe localmente." + CHR(13) + CHR(10)
+        STRTOFILE(lcErrVen, lcDirData + "error_sync.txt", 1)
+        IF TYPE("PCESTADORECIBE") = "C"
+            PCESTADORECIBE = PCESTADORECIBE + lcErrVen
         ENDIF
+        SELECT cur_conex_doc
+        SKIP
+        LOOP
     ENDIF
     
     IF llError
