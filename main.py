@@ -19,8 +19,8 @@ class GalepsoSyncApp(ctk.CTk):
         super().__init__()
 
         self.title("Sincronizador de Datos Galepso")
-        self.geometry("620x380")
-        self.minsize(600, 360)
+        self.geometry("820x410")
+        self.minsize(820, 380)
 
         # Ruta absoluta al icono (relativa al directorio del script)
         _base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -86,40 +86,67 @@ class GalepsoSyncApp(ctk.CTk):
         self.footer_frame = ctk.CTkFrame(self)
         self.footer_frame.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
 
+        # Barra de progreso integrada en la parte superior del footer
+        self.progress_bar = ctk.CTkProgressBar(self.footer_frame, height=6)
+        self.progress_bar.pack(side="top", fill="x", padx=10, pady=(10, 0))
+        self.progress_bar.set(0)
+
+        # Contenedor para botones y etiquetas
+        self.footer_controls = ctk.CTkFrame(self.footer_frame, fg_color="transparent")
+        self.footer_controls.pack(side="top", fill="x", padx=0, pady=0)
+
         # Indicador visual de estado
         self.lbl_estado = ctk.CTkLabel(
-            self.footer_frame, 
+            self.footer_controls, 
             text="Estado: Pausado", 
-            text_color="red", 
+            text_color=("gray40", "gray60"), 
+            width=190,
+            anchor="w",
             font=ctk.CTkFont(weight="bold")
         )
         self.lbl_estado.pack(side="left", padx=(20, 0), pady=10)
 
+        # Indicador de última ejecución
+        self.lbl_ultima_ejecucion = ctk.CTkLabel(
+            self.footer_controls,
+            text="Última ejecución: --:--:--",
+            text_color="gray",
+            width=170,
+            anchor="w"
+        )
+        self.lbl_ultima_ejecucion.pack(side="left", padx=(10, 0), pady=10)
+
         # Botones globales
         self.btn_salir = ctk.CTkButton(
-            self.footer_frame, 
+            self.footer_controls, 
             text="Salir", 
             command=self.al_cerrar, 
-            width=90,
-            height=36
+            width=100,
+            height=36,
+            fg_color=("#E5E5E5", "#333333"),
+            text_color=("black", "white"),
+            hover_color=("#D4D4D4", "#444444")
         )
         self.btn_salir.pack(side="right", padx=(5, 15), pady=10)
 
         self.btn_sync_ahora = ctk.CTkButton(
-            self.footer_frame, 
+            self.footer_controls, 
             text="Sincronizar Ahora", 
             command=self.sincronizar_ahora, 
-            width=130,
+            width=150,
             height=36
         )
         self.btn_sync_ahora.pack(side="right", padx=5, pady=10)
 
         self.btn_iniciar_auto = ctk.CTkButton(
-            self.footer_frame, 
+            self.footer_controls, 
             text="Iniciar Automático", 
             command=self.toggle_auto_sync, 
-            width=130,
-            height=36
+            width=160,
+            height=36,
+            fg_color="#2CC985",
+            hover_color="#23A069",
+            text_color="white"
         )
         self.btn_iniciar_auto.pack(side="right", padx=5, pady=10)
         
@@ -255,12 +282,24 @@ class GalepsoSyncApp(ctk.CTk):
 
     def construir_tab_empresas(self):
         """Elementos de la pestaña de Empresas y Rutas"""
-        self.tab_empresas.grid_columnconfigure(1, weight=1)
+        # Centrar la tarjeta contenedora
+        self.tab_empresas.grid_rowconfigure(0, weight=1)
+        self.tab_empresas.grid_rowconfigure(2, weight=1)
+        self.tab_empresas.grid_columnconfigure(0, weight=1)
+        self.tab_empresas.grid_columnconfigure(2, weight=1)
+
+        self.frame_empresas = ctk.CTkFrame(
+            self.tab_empresas,
+            fg_color=("#F2F2F2", "#2D2D2D"),
+            corner_radius=12,
+        )
+        self.frame_empresas.grid(row=1, column=1, sticky="ew", padx=25, pady=25)
+        self.frame_empresas.grid_columnconfigure(1, weight=1)
         
-        ctk.CTkLabel(self.tab_empresas, text="Ruta Directorio Local (Data):").grid(row=0, column=0, padx=10, pady=20, sticky="e")
+        ctk.CTkLabel(self.frame_empresas, text="Ruta Directorio Local (Data):").grid(row=0, column=0, padx=20, pady=(25, 10), sticky="e")
         
-        frame_ruta = ctk.CTkFrame(self.tab_empresas, fg_color="transparent")
-        frame_ruta.grid(row=0, column=1, padx=10, pady=20, sticky="ew")
+        frame_ruta = ctk.CTkFrame(self.frame_empresas, fg_color="transparent")
+        frame_ruta.grid(row=0, column=1, padx=(0, 20), pady=(25, 10), sticky="ew")
         frame_ruta.grid_columnconfigure(0, weight=1)
         frame_ruta.grid_columnconfigure(1, weight=0)
         
@@ -270,9 +309,9 @@ class GalepsoSyncApp(ctk.CTk):
         btn_examinar = ctk.CTkButton(frame_ruta, text="Examinar...", width=90, command=self.seleccionar_carpeta)
         btn_examinar.grid(row=0, column=1, padx=(5, 0), sticky="w")
 
-        ctk.CTkLabel(self.tab_empresas, text="Código de Empresa (ID):").grid(row=1, column=0, padx=10, pady=10, sticky="e")
-        self.ent_id_enterprise = ctk.CTkEntry(self.tab_empresas, width=100)
-        self.ent_id_enterprise.grid(row=1, column=1, padx=10, pady=10, sticky="w")
+        ctk.CTkLabel(self.frame_empresas, text="Código de Empresa (ID):").grid(row=1, column=0, padx=20, pady=(10, 25), sticky="e")
+        self.ent_id_enterprise = ctk.CTkEntry(self.frame_empresas, width=100)
+        self.ent_id_enterprise.grid(row=1, column=1, padx=(0, 20), pady=(10, 25), sticky="w")
 
     def seleccionar_carpeta(self):
         from tkinter import filedialog
@@ -643,13 +682,42 @@ class GalepsoSyncApp(ctk.CTk):
 
     def set_estado_pausado(self):
         """Actualiza la interfaz visual al estado Pausado"""
-        self.lbl_estado.configure(text="Estado: Pausado", text_color="red")
+        self.lbl_estado.configure(text="Estado: Pausado", text_color=("gray40", "gray60"))
         self.btn_iniciar_auto.configure(
             text="Iniciar Automático", 
             fg_color=self._btn_iniciar_fg_color, 
             hover_color=self._btn_iniciar_hover_color
         )
         self.btn_sync_ahora.configure(state="normal")
+
+    def _ui_start_sync(self):
+        """Prepara la interfaz para indicar sincronización activa"""
+        self.lbl_estado.configure(text="🔄 Sincronizando...", text_color="orange")
+        self.progress_bar.configure(mode="indeterminate")
+        self.progress_bar.start()
+
+    def _ui_stop_sync(self, exito: bool, manual: bool):
+        """Detiene la barra de progreso y actualiza estado final"""
+        self.progress_bar.stop()
+        self.progress_bar.configure(mode="determinate")
+        
+        if exito:
+            self.progress_bar.set(1.0)
+            hora_actual = time.strftime("%H:%M:%S")
+            self.lbl_ultima_ejecucion.configure(text=f"Última ejecución: {hora_actual}")
+        else:
+            self.progress_bar.set(0)
+            
+        if manual:
+            self.set_estado_pausado()
+        else:
+            if self.sincronizacion_activa:
+                self.lbl_estado.configure(text="● Auto: Esperando...", text_color="#2CC985")
+
+    def _ui_update_countdown(self, tiempo_str):
+        """Actualiza el label de estado con la cuenta regresiva si está activo el automático"""
+        if self.sincronizacion_activa:
+            self.lbl_estado.configure(text=f"● Auto: Próxima en {tiempo_str}", text_color="#2CC985")
 
     def toggle_auto_sync(self):
         """Alterna el inicio y detención del timer automático"""
@@ -677,8 +745,8 @@ class GalepsoSyncApp(ctk.CTk):
     def sincronizar_ahora(self):
         """Dispara una sincronización manual sin congelar la UI."""
         self.btn_sync_ahora.configure(state="disabled")
-        self.lbl_estado.configure(text="Estado: Sincronizando...", text_color="orange")
-
+        # El estado visual ahora lo maneja _ui_start_sync
+        
         self.generar_archivo_config()
 
         hilo = threading.Thread(target=self._hilo_sincronizacion, daemon=True)
@@ -688,11 +756,15 @@ class GalepsoSyncApp(ctk.CTk):
         """Hilo de trabajo para sincronización manual: invoca el backend VFP y reporta resultado."""
         hora_inicio = time.strftime("%Y-%m-%d %H:%M:%S")
         self.log_evento(f"▶ Iniciando sincronización manual...")
-        self.ejecutar_backend_vfp()
+        
+        self.after(0, self._ui_start_sync)
+        
+        exito = self.ejecutar_backend_vfp()
+        
         self.log_evento("✔ Proceso de sincronización finalizado.")
 
         # Restaurar estado UI en el hilo principal
-        self.after(0, self.set_estado_pausado)
+        self.after(0, lambda: self._ui_stop_sync(exito, manual=True))
 
     def _bucle_sincronizacion(self, minutos):
         """Bucle infinito para el timer automático, ejecutado en un hilo separado."""
@@ -701,17 +773,28 @@ class GalepsoSyncApp(ctk.CTk):
         while self.sincronizacion_activa:
             # 1. Ejecutar la sincronización (reutiliza el método del botón manual)
             self.log_evento(f"▶ Iniciando ciclo automático (Intervalo: {minutos} min)...")
-            self.ejecutar_backend_vfp() 
+            
+            self.after(0, self._ui_start_sync)
+            
+            exito = self.ejecutar_backend_vfp() 
             self.log_evento("✔ Ciclo finalizado. Esperando próximo turno...")
             
+            self.after(0, lambda: self._ui_stop_sync(exito, manual=False))
+            
             # 2. Espera interrumpible (revisando la bandera cada segundo)
-            for _ in range(segundos_totales):
+            for i in range(segundos_totales, 0, -1):
                 if not self.sincronizacion_activa:
                     self.log_evento("⏹ Sincronización automática detenida.")
                     return # Sale del hilo si el usuario presionó "Detener"
+                
+                # Actualizar cuenta regresiva
+                mins, secs = divmod(i, 60)
+                tiempo_str = f"{mins:02d}:{secs:02d}"
+                self.after(0, lambda t=tiempo_str: self._ui_update_countdown(t))
+                
                 time.sleep(1)
 
-    def ejecutar_backend_vfp(self):
+    def ejecutar_backend_vfp(self) -> bool:
         """
         Puente Backend — Arquitectura de Integración.
         Lanza el ejecutable de Visual FoxPro (o el .exe compilado) como subproceso
@@ -731,7 +814,7 @@ class GalepsoSyncApp(ctk.CTk):
                 f"{comando_exe}\n"
                 f"Por favor, verifica que la compilación de FoxPro exista."
             )
-            return
+            return False
 
         comando = [comando_exe]
 
@@ -747,6 +830,7 @@ class GalepsoSyncApp(ctk.CTk):
 
             # Bloquea ESTE hilo hasta que VFP termine; la UI sigue respondiendo
             proceso.wait()
+            exito = (proceso.returncode == 0)
 
             # Leer stderr si el proceso ya terminó
             stderr_bytes = proceso.stderr.read() if proceso.stderr else b""
@@ -758,13 +842,17 @@ class GalepsoSyncApp(ctk.CTk):
 
             # Leer el log.txt que VFP haya generado
             self.leer_log_backend()
+            
+            return exito
 
         except FileNotFoundError:
             self.log_evento(
                 f"⚠ No se encontró el ejecutable VFP. Ruta buscada:\n{comando_exe}"
             )
+            return False
         except Exception as e:
             self.log_evento(f"Error crítico al invocar VFP: {e}")
+            return False
 
     def leer_log_backend(self):
         """Lee el archivo log.txt generado por el backend VFP y lo vuelca en el Textbox."""

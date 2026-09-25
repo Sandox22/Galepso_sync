@@ -177,9 +177,29 @@ MM/DD/YY HH:MM:SS AM - ERROR CRITICO: Num: <nError> | Msj: <message> | Cod: <cod
 | Aspecto | Detalle |
 |---|---|
 | **Archivos** | [`clientes.prg`](file:///c:/GalepsoSync/prg/clientes.prg), [`clientes_bajada.prg`](file:///c:/GalepsoSync/prg/clientes_bajada.prg), [`sincronizar.prg`](file:///c:/GalepsoSync/sincronizar.prg) |
-| **Patrón** | Bidireccional (Subida + Bajada independientes) |
+| **Patrón** | Bidireccional (Subida + Bajada independientes + Two-Step Reset) |
 | **Tablas locales** | `tclientes.dbf`, `tvendedores.dbf`, `tcontroles.dbf` |
 | **Tablas remotas** | `conex_clientes`, `conex_vendedores` |
+
+#### Definición de Columnas de Control en `conex_clientes`
+
+- **`CNX_CLT_CHECK` (Semáforo de Creación / Descarga Inicial):**
+  * `0` o vacío: Indica que el registro fue creado en la nube y aún no se ha descargado a la base de datos local (`tclientes`). Va acompañado de `CNX_CLT_GALEXO` vacío.
+  * `1`: Indica que el registro ya fue descargado a la base de datos local y ya posee su código espejo en `CNX_CLT_GALEXO`.
+- **`CNX_CLT_MODIFICADO` (Semáforo de Ediciones):**
+  * `1`: Indica que algún campo comercial del registro sufrió una modificación en la nube (activado por trigger de MariaDB) y está pendiente por descargarse al ERP local.
+  * `0`: Indica que el cambio ya fue descargado y aplicado en la tabla local (o que el registro está en reposo sin ediciones pendientes).
+- **`CNX_CLT_GALEXO` (Ancla Espejo Local):**
+  * Almacena el `cid_clien` (Character 5) de Galepso para vincular de forma permanente el registro entre ambos sistemas, independientemente de si ADN modifica la llave primaria `CNX_CLT_CODIGO`.
+
+#### Matriz de Estados Transaccionales
+
+| Escenario del Cliente | `CNX_CLT_CHECK` | `CNX_CLT_GALEXO` | `CNX_CLT_MODIFICADO` | Acción del Sincronizador (VFP) |
+| :--- | :---: | :---: | :---: | :--- |
+| **Nuevo en la Nube** | `0` | *Vacío* | `0` | Descarga el registro, asigna correlativo desde `tcontroles.NCLIENTE`, inserta en `tclientes`, llena `GALEXO`, pasa `CHECK` a `1` y asegura `MODIFICADO` en `0`. |
+| **Sincronizado y sin cambios** | `1` | `'10007'` | `0` | Se omite en las fases de bajada (en reposo). |
+| **Editado en la Nube** | `1` | `'10007'` | `1` | El Radar de Ediciones actualiza la ficha local en `tclientes` (sanitizando nulos) y devuelve `MODIFICADO` a `0`. |
+| **Editado o Creado en Local (Galepso)** | `1` | `'10007'` | `0` | Sube el cambio a MariaDB (`INSERT`/`UPDATE`) e inmediatamente ejecuta un segundo `UPDATE` (*Two-Step Reset*) forzando `CNX_CLT_MODIFICADO = 0` para neutralizar el trigger de MariaDB y evitar el efecto boomerang. |
 
 #### 2.1.1 Subida (VFP → MariaDB)
 

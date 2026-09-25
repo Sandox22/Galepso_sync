@@ -28,7 +28,7 @@ Consulta los archivos de referencia para detalles completos:
 
 ## Resumen de tcMap Probados en Producción
 
-### Clientes (cxc.prg → conex_clientes)
+### Clientes (cxc.prg / clientes.prg → conex_clientes)
 ```
 cid_clien|CNX_CLT_CODIGO|C,
 cnombre_cl|CNX_CLT_NOMBRE|C,
@@ -39,6 +39,28 @@ cid_vende|CNX_CLT_VEN_CODIGO|C,
 cid_estadc|CNX_CLT_EDO_CODIGO|N,
 cid_ciudac|CNX_CLT_MPO_CODIGO|N
 ```
+
+#### Columnas de Control (Semáforos) en `conex_clientes`
+
+Para gestionar la bidireccionalidad sin ciclos infinitos, el sistema implementa un esquema de semáforos y un patrón de *Two-Step Reset*:
+
+- **`CNX_CLT_CHECK`**:
+  * `0` (o vacío): Nuevo en la nube, pendiente de bajada a Galepso.
+  * `1`: Sincronizado, código espejo local generado.
+- **`CNX_CLT_MODIFICADO` (Radar de Ediciones)**:
+  * `1`: Editado en la nube (via Trigger), pendiente de bajada a Galepso.
+  * `0`: Reposo / Actualizado.
+- **`CNX_CLT_GALEXO` (Ancla Espejo Local)**:
+  * Contiene el correlativo `cid_clien` de Galepso, garantizando la identidad independientemente de si la llave `CNX_CLT_CODIGO` cambia en la web.
+
+**Matriz de Estados Transaccionales:**
+
+| Escenario del Cliente | `CNX_CLT_CHECK` | `CNX_CLT_GALEXO` | `CNX_CLT_MODIFICADO` | Acción del Sincronizador (VFP) |
+| :--- | :---: | :---: | :---: | :--- |
+| **Nuevo en la Nube** | `0` | *Vacío* | `0` | Descarga el registro, inserta en `tclientes`, asigna `GALEXO`, pasa `CHECK` a `1`. |
+| **Sincronizado y sin cambios** | `1` | `'10007'` | `0` | Omitido (en reposo). |
+| **Editado en la Nube** | `1` | `'10007'` | `1` | Actualiza la ficha local en `tclientes` y devuelve `MODIFICADO` a `0`. |
+| **Editado/Creado en Local** | `1` | `'10007'` | `0` | Sube cambio a MariaDB + *Two-Step Reset* (`UPDATE CNX_CLT_MODIFICADO = 0`). |
 
 ### Productos (productos.prg → conex_productos)
 ```
